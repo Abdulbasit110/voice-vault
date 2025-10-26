@@ -1,0 +1,38 @@
+---
+globs: components/voice-assistant.tsx,**/voice*.tsx
+---
+# Voice Assistant Patterns
+
+## Voice Interface Standards
+
+### Component Structure
+- Use Framer Motion for animations (`motion.div`, `motion.button`)
+- Animated mic button with ripple effects when listening
+- Real-time waveform visualization during voice input
+- Status text showing "Listening..." or "Voice Assistant"
+
+### Voice Command Examples
+Users can say commands like:
+- "Buy 0.5 ETH with 25% of my USDC"
+- "Transfer 100 USDC to 0x1234..."
+- "Sell 10% of my portfolio"
+- "Show my portfolio balance"
+
+### Implementation Approach
+1. Frontend captures voice input via Web Speech API or ElevenLabs client
+2. Sends audio/text to backend FastAPI endpoint
+3. Backend processes through AI agent system
+4. Returns transaction result
+5. Frontend displays confirmation with TTS response
+
+### State Management
+- `isListening`: Boolean for mic active state
+- `transcript`: String for captured voice text
+- `transactions`: Array of transaction history
+- `portfolio`: Current portfolio state
+
+### Visual Feedback
+- Animated microphone with pulsing ripple effect
+- Color change: purple (idle) → blue (active)
+- Waveform bars during listening
+- Status messages for user guidance

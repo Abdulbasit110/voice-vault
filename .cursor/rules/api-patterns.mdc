@@ -1,0 +1,59 @@
+---
+globs: backend/**/*.py,**/api*.py
+---
+# Backend API Patterns
+
+## FastAPI Structure
+
+### Main App (`backend/main.py`)
+```python
+from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
+
+app = FastAPI(title="VoiceVault API")
+
+# CORS for Next.js frontend
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+```
+
+### Key Endpoints
+
+#### POST `/api/voice/process`
+Process voice command
+- Input: `{audio: "base64"}` or `{text: "buy 0.5 ETH"}`
+- Output: `{transaction_id, status, response_text}`
+
+#### GET `/api/portfolio`
+Get current portfolio
+- Output: `{assets: [...], total_value, allocations}`
+
+#### GET `/api/transactions`
+Get transaction history
+- Output: `{transactions: [...], total_count}`
+
+#### POST `/api/agents/execute`
+Execute transaction via agents
+- Input: `{command: "buy ETH", params: {...}}`
+- Output: Agent execution result
+
+## Environment Variables
+Use `os.getenv()` for all configuration:
+- `ELEVENLABS_API_KEY`
+- `OPENAI_API_KEY`
+- `CIRCLE_API_KEY`
+- `CIRCLE_ENTITY_SECRET`
+- `ARC_RPC_URL`
+- `MONGODB_URI`
+- `PRIVATE_KEY` (wallet private key)
+
+## Error Handling
+- Return proper HTTP status codes
+- Log errors for debugging
+- Return user-friendly error messages
+- Validate all inputs before processing

@@ -1,0 +1,37 @@
+---
+globs: components/**/*.tsx,app/**/*.tsx
+---
+# Frontend UI Patterns
+
+## Component Standards
+
+### Styling
+- Use Tailwind CSS classes
+- Gradient backgrounds: `bg-gradient-to-br from-slate-800/50 to-purple-900/50`
+- Border: `border border-purple-500/30`
+- Backdrop blur: `backdrop-blur-xl`
+- Purple theme throughout
+
+### Animations
+- Use Framer Motion: `motion.div`, `motion.button`
+- Fade in: `initial={{ opacity: 0, y: 20 }}` → `animate={{ opacity: 1, y: 0 }}`
+- Hover: `whileHover={{ scale: 1.1 }}`
+- Loading states with animated components
+
+### Component Types
+- **Voice Assistant**: Mic button, waveform visualization
+- **Portfolio Overview**: Charts, asset breakdown
+- **Transaction History**: Table with status indicators
+- **Risk Analysis**: Progress bars, metrics
+- **AI Insights**: Cards with recommendations
+
+### State Management
+- Use `useState` for local state
+- Use `useEffect` for API calls
+- Real-time updates via WebSocket or polling
+
+### API Integration
+- Fetch from backend: `/api/portfolio`, `/api/transactions`
+- Handle loading states
+- Display error messages
+- Update UI after successful operations

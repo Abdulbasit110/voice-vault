@@ -1,0 +1,50 @@
+---
+globs: **/*circle*.py,**/*arc*.py,**/*blockchain*.py,**/*wallet*.py
+---
+# Blockchain Integration Patterns
+
+## Circle User Controlled Wallets
+
+### Setup
+```python
+from circle_fin import UserControlledWalletsService
+
+wallet_client = UserControlledWalletsService({
+    "api_key": os.getenv("CIRCLE_API_KEY")
+})
+```
+
+### Key Operations
+- **Create Wallet**: `wallet_client.createEndUserWallet()`
+- **Sign Transaction**: `wallet_client.signTransaction()`
+- **Get Balance**: `wallet_client.getBalance()`
+- **Transfer**: Use Circle API for USDC transfers
+
+## Arc Blockchain (EVM-Compatible)
+
+### Setup
+```python
+from ethers import providers, Wallet
+
+provider = providers.JsonRpcProvider(os.getenv("ARC_RPC_URL"))
+wallet = Wallet(os.getenv("PRIVATE_KEY"), provider)
+```
+
+### Arc Network Details
+- **Chain**: Arc Mainnet
+- **Native Gas**: USDC (not ETH)
+- **EVM**: Fully compatible (use ethers.js/web3.py)
+- **RPC**: Arc RPC endpoint
+
+### Transaction Execution
+1. Build transaction via Circle User Controlled Wallet
+2. Sign transaction with user's wallet
+3. Send to Arc blockchain
+4. Wait for confirmation (USDC native gas)
+
+## Security
+- NEVER commit private keys or secrets
+- Use environment variables ([[memory:2803072]])
+- Validate all transaction parameters before signing
+- Implement transaction confirmations for large amounts
+- Use Circle's built-in security features

@@ -1,0 +1,36 @@
+---
+alwaysApply: true
+---
+# VoiceVault - Voice-Autonomous DeFi Platform
+
+This is a voice-activated DeFi platform being built for the LabLab.ai AI Agents + Arc & USDC hackathon (Oct 27 - Nov 8, 2025).
+
+## Architecture
+
+**Frontend**: Next.js 16 (React 19) with TypeScript, Tailwind CSS, Framer Motion
+- Location: `voice-vault/` directory
+- Main pages: `app/page.tsx` (dashboard)
+- Components: `components/voice-assistant.tsx`, `components/portfolio-overview.tsx`, etc.
+
+**Backend**: FastAPI (Python) - to be created
+- Will use OpenAI Agents SDK for multi-agent orchestration
+- Integration with Circle User Controlled Wallets SDK
+- ElevenLabs for voice STT/TTS
+- MongoDB for portfolio & transaction storage
+- Arc blockchain via ethers.js
+
+**Key Components**:
+- [Voice Assistant](mdc:components/voice-assistant.tsx) - Main voice interface
+- [Portfolio Overview](mdc:components/portfolio-overview.tsx) - Portfolio visualization
+- [Transaction History](mdc:components/transaction-history.tsx) - Transaction display
+- [Plan](mdc:plan.md) - Project roadmap and requirements
+
+## Core Flow
+User Voice → ElevenLabs STT → Agents (Planner, Risk, Executor, Auditor) → Circle API → Arc Blockchain → Response
+
+## Technologies
+- **Voice**: ElevenLabs API
+- **AI Agents**: OpenAI Agents SDK (use [[memory:2803062]])
+- **Blockchain**: Arc (EVM), USDC transactions, Circle User Controlled Wallets
+- **Database**: MongoDB
+- **Environment**: Use env vars for config ([[memory:2803072]])

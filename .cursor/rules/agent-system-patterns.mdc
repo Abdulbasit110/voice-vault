@@ -1,0 +1,64 @@
+---
+globs: **/agents/**/*.py,**/*agent*.py
+description: AI Agent System Architecture
+---
+# AI Agent System Patterns
+
+## Agent Architecture (OpenAI Agents SDK)
+
+Use OpenAI Agents SDK for multi-agent orchestration ([[memory:2803062]]).
+
+### Agent Roles
+
+#### 1. Planner Agent
+- **Purpose**: Parse voice command → structured transaction
+- **Input**: Natural language ("Buy 0.5 ETH")
+- **Output**: Transaction parameters `{action: "buy", asset: "ETH", amount: 0.5, ...}`
+- **Location**: `backend/agents/planner.py`
+
+#### 2. Risk Analyst Agent
+- **Purpose**: Validate transaction safety
+- **Checks**: Portfolio allocation, market conditions, risk limits
+- **Output**: Boolean approval with reasoning
+- **Location**: `backend/agents/risk_analyst.py`
+
+#### 3. Portfolio Manager Agent
+- **Purpose**: Manage balance & allocation
+- **Checks**: Sufficient funds, diversification rules
+- **Output**: Available balance, suggested adjustments
+- **Location**: `backend/agents/portfolio_manager.py`
+
+#### 4. Security Validator Agent
+- **Purpose**: Validate transaction parameters
+- **Checks**: Amount limits, address validity, no suspicious patterns
+- **Output**: Validation result with security score
+- **Location**: `backend/agents/security_validator.py`
+
+#### 5. Executor Agent
+- **Purpose**: Execute blockchain transaction
+- **Actions**: Call Circle API → Arc blockchain
+- **Output**: Transaction hash, status
+- **Location**: `backend/agents/executor.py`
+
+#### 6. Auditor Agent
+- **Purpose**: Verify transaction on-chain
+- **Actions**: Query Arc blockchain, verify confirmation
+- **Output**: Confirmation status
+- **Location**: `backend/agents/auditor.py`
+
+## Agent Tools
+Agents use tools defined in `backend/tools/agent_tools.py`:
+- `get_portfolio()` - Fetch current portfolio
+- `check_balance(token)` - Get balance for token
+- `execute_transaction(params)` - Execute via Circle API
+- `verify_transaction(tx_hash)` - Verify on Arc
+
+## Agent Workflow
+1. Voice command received
+2. Planner extracts intent
+3. Risk Analyst validates safety
+4. Portfolio Manager checks funds
+5. Security Validator confirms parameters
+6. Executor performs transaction
+7. Auditor verifies on-chain
+8. Response sent to frontend
