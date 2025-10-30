@@ -1,26 +1,21 @@
-from typing import Dict, Any
+from tools.agent_tools import mock_audit_transaction
+from pydantic import BaseModel
+from agents import Agent
 
-try:
-    from openai.types.beta.agents import Agent
-    from openai.resources.beta.agents import function_tool
-except Exception:  # pragma: no cover
-    Agent = object
-    def function_tool(*args, **kwargs):
-        return None
+AUDITOR_PROMPT = (
+    "You are the Auditor. Use the provided tool to verify the transaction by id and report confirmation."
+)
 
-from backend.tools.agent_tools import mock_audit_transaction
-
+class AuditorSummary(BaseModel):
+    summary: str
+    """Short text summary for this aspect of the analysis."""
 
 def build_auditor_agent() -> Agent:
-    """Create Auditor agent that confirms a mocked transaction."""
-    audit_tool = function_tool(mock_audit_transaction)
-
+    audit_tool = mock_audit_transaction
     agent = Agent(
-        name="Auditor",
-        instructions=(
-            "You are the Auditor. Use the provided tool to verify the transaction by id and report confirmation."
-        ),
-        tools=[audit_tool],
-        model="gpt-4o-mini",
+    name="AuditorAgent",
+    instructions=AUDITOR_PROMPT,
+    output_type=AuditorSummary,
+    tools=[audit_tool],
     )
     return agent

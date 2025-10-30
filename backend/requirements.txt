@@ -3,4 +3,6 @@ uvicorn[standard]
 python-dotenv
 pydantic
 requests
+pymongo
+openai-agents
 

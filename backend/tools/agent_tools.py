@@ -2,7 +2,10 @@ import re
 import uuid
 from typing import Dict, Any, Optional
 
+from agents import function_tool
 
+
+@function_tool
 def parse_natural_command(command_text: str) -> Dict[str, Any]:
     """Parse a simple NL command into a structured intent.
 
@@ -61,6 +64,7 @@ def parse_natural_command(command_text: str) -> Dict[str, Any]:
     return intent
 
 
+@function_tool
 def get_mock_portfolio() -> Dict[str, Any]:
     """Return a deterministic mock portfolio for validation."""
     return {
@@ -76,6 +80,7 @@ def get_mock_portfolio() -> Dict[str, Any]:
     }
 
 
+@function_tool
 def basic_risk_check(intent: Dict[str, Any], portfolio: Dict[str, Any]) -> Dict[str, Any]:
     """Very simple thresholds-based risk gate.
     Rules:
@@ -114,6 +119,7 @@ def basic_risk_check(intent: Dict[str, Any], portfolio: Dict[str, Any]) -> Dict[
     return {"approved": approved, "reasons": reasons}
 
 
+@function_tool
 def security_validate(intent: Dict[str, Any]) -> Dict[str, Any]:
     """Basic security checks: destination format, positive amounts, known assets."""
     reasons = []
@@ -143,6 +149,7 @@ def security_validate(intent: Dict[str, Any]) -> Dict[str, Any]:
     return {"valid": valid, "reasons": reasons}
 
 
+@function_tool
 def mock_execute_transaction(intent: Dict[str, Any]) -> Dict[str, Any]:
     """Return a dummy transaction result."""
     return {
@@ -152,6 +159,7 @@ def mock_execute_transaction(intent: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
+@function_tool
 def mock_audit_transaction(transaction_id: str) -> Dict[str, Any]:
     """Return a dummy audit confirmation."""
     return {

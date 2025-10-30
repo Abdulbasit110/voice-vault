@@ -1,82 +1,68 @@
-from typing import Dict, Any
-import os
+from typing import Any, Dict
 
-try:
-    from openai import OpenAI
-    from openai.types.beta.agents import Agent
-    from openai.resources.beta import agents as agents_api
-    from openai.types.beta import Threads
-    from openai.types.beta.threads import TextInput
-except Exception:  # pragma: no cover
-    OpenAI = None
+import asyncio
+from Agents.planner import build_planner_agent
+from Agents.portfolio_manager import build_portfolio_manager_agent
+from Agents.risk_analyst import build_risk_analyst_agent
+from Agents.security_validator import build_security_validator_agent
+from Agents.executor import build_executor_agent
+from Agents.auditor import build_auditor_agent
+from agents import Runner
 
-from backend.agents.planner import build_planner_agent
-from backend.agents.risk_analyst import build_risk_analyst_agent
-from backend.agents.portfolio_manager import build_portfolio_manager_agent
-from backend.agents.security_validator import build_security_validator_agent
-from backend.agents.executor import build_executor_agent
-from backend.agents.auditor import build_auditor_agent
-from backend.tools.agent_tools import (
-    parse_natural_command,
-    get_mock_portfolio,
-    basic_risk_check,
-    security_validate,
-    mock_execute_transaction,
-    mock_audit_transaction,
-)
+class AgentRunner:
+	"""Full agent-based sequential workflow runner (deterministic)."""
+	def __init__(self):
+		self.planner_agent = build_planner_agent()
+		self.portfolio_agent = build_portfolio_manager_agent()
+		self.risk_agent = build_risk_analyst_agent()
+		self.security_agent = build_security_validator_agent()
+		self.executor_agent = build_executor_agent()
+		self.auditor_agent = build_auditor_agent()
 
+	async def run(self, user_text: str):
+		print(user_text)
 
-class AgenticFlowRunner:
-    """Coordinates the end-to-end flow using OpenAI Agents SDK.
-    This implementation doesn't rely on long-lived threads; it orchestrates tools deterministically.
-    """
+		# 1. Planner
+		planner_result = await Runner.run(self.planner_agent, user_text)
+		planner_out = getattr(planner_result, "final_output", planner_result)
+		print(planner_out)
 
-    def __init__(self) -> None:
-        self.api_key = os.getenv("OPENAI_API_KEY")
-        self.client = OpenAI(api_key=self.api_key) if self.api_key and OpenAI else None
+		# 2. Portfolio Manager
+		portfolio_result = await Runner.run(self.portfolio_agent, None)
+		portfolio_out = getattr(portfolio_result, "final_output", portfolio_result)
+		print(portfolio_out)
 
-        # Build agents (metadata/intent). We will call tools directly to keep it deterministic.
-        self.planner = build_planner_agent()
-        self.portfolio = build_portfolio_manager_agent()
-        self.risk = build_risk_analyst_agent()
-        self.security = build_security_validator_agent()
-        self.executor = build_executor_agent()
-        self.auditor = build_auditor_agent()
+		# 3. Risk Analyst (expects intent + portfolio context)
+		risk_input = {"intent": planner_out, "portfolio": portfolio_out}
+		risk_result = await Runner.run(self.risk_agent, risk_input)
+		risk_out = getattr(risk_result, "final_output", risk_result)
+		print(risk_out)
+		if isinstance(risk_out, dict) and not risk_out.get("approved", True):
+			return risk_out
+		if hasattr(risk_out, "approved") and not getattr(risk_out, "approved"):
+			return risk_out
 
-    def run(self, text: str) -> Dict[str, Any]:
-        # 1) Planner parses
-        parsed = parse_natural_command(text)
+		# 4. Security Validator (expects intent)
+		security_result = await Runner.run(self.security_agent, planner_out)
+		security_out = getattr(security_result, "final_output", security_result)
+		print(security_out)
+		if isinstance(security_out, dict) and not security_out.get("valid", True):
+			return security_out
+		if hasattr(security_out, "valid") and not getattr(security_out, "valid"):
+			return security_out
 
-        # 2) Portfolio fetch
-        portfolio = get_mock_portfolio()
+		# 5. Executor (uses intent)
+		exec_result = await Runner.run(self.executor_agent, planner_out)
+		exec_out = getattr(exec_result, "final_output", exec_result)
+		print(exec_out)
 
-        # 3) Risk check
-        risk_eval = basic_risk_check(parsed, portfolio)
-
-        # 4) Security validation
-        sec_eval = security_validate(parsed)
-
-        approved = risk_eval.get("approved", False) and sec_eval.get("valid", False)
-
-        # 5) Execute (mock)
-        tx = mock_execute_transaction(parsed) if approved else {"skipped": True}
-
-        # 6) Audit (mock)
-        audit = (
-            mock_audit_transaction(tx.get("transaction_id", "mock_none")) if approved else {"skipped": True}
-        )
-
-        return {
-            "approved": approved,
-            "parsed": parsed,
-            "portfolio": {
-                "total_value_usd": portfolio.get("total_value_usd"),
-                "allocations_pct": portfolio.get("allocations_pct"),
-            },
-            "validations": {
-                "risk": risk_eval,
-                "security": sec_eval,
-            },
-            "transaction": tx,
-            "audit": audit,
-        }
+		# 6. Auditor
+		tx_id = None
+		if isinstance(exec_out, dict):
+			tx_id = exec_out.get("transaction_id")
+		else:
+			tx_id = getattr(exec_out, "transaction_id", None)
+		audit_result = await Runner.run(self.auditor_agent, tx_id)
+		audit_out = getattr(audit_result, "final_output", audit_result)
+		print(audit_out)
+		return audit_out

@@ -1,27 +1,27 @@
-from typing import Dict, Any
+from tools.agent_tools import basic_risk_check
+from pydantic import BaseModel
+from agents import Agent
 
-try:
-    from openai.types.beta.agents import Agent
-    from openai.resources.beta.agents import function_tool
-except Exception:  # pragma: no cover
-    Agent = object
-    def function_tool(*args, **kwargs):
-        return None
+# A sub‑agent specializing in identifying risk factors or concerns.
+RISK_PROMPT = (
+    "You are a risk analyst looking for potential red flags in a company's outlook. "
+    "Given background research, produce a short analysis of risks such as competitive threats, "
+    "regulatory issues, supply chain problems, or slowing growth. Keep it under 2 paragraphs."
+)
 
-from backend.tools.agent_tools import basic_risk_check
+
+class AnalysisSummary(BaseModel):
+    summary: str
+    """Short text summary for this aspect of the analysis."""
 
 
 def build_risk_analyst_agent() -> Agent:
-    """Create Risk Analyst agent that performs simple threshold checks."""
-    risk_tool = function_tool(basic_risk_check)
-
+    risk_tool = basic_risk_check
     agent = Agent(
-        name="RiskAnalyst",
-        instructions=(
-            "You are the Risk Analyst. Call the provided tool to evaluate whether the transaction "
-            "violates risk thresholds. Summarize reasons if not approved."
-        ),
-        tools=[risk_tool],
-        model="gpt-4o-mini",
-    )
+    name="RiskAnalystAgent",
+    instructions=RISK_PROMPT,
+    output_type=AnalysisSummary,
+    tools=[risk_tool],
+    model="gpt-4o-mini",
+)
     return agent
