@@ -110,18 +110,21 @@ async def get_transactions():
 @app.post("/api/agents/execute")
 async def execute_with_agents(request: VoiceRequest):
     """
-    Execute transaction using AI agent system
+    Execute transaction using AI agent system (mocked execution)
     """
     try:
-        # TODO: Implement agent orchestration
-        # TODO: Call Planner, Risk, Executor, Auditor agents
-        # TODO: Execute transaction via Circle API
-        
-        return {
-            "success": True,
-            "transaction_id": "mock_tx_agent_456",
-            "message": f"Agent system processed: {request.text}"
-        }
+        from backend.services.agents_runner import AgenticFlowRunner
+
+        runner = AgenticFlowRunner()
+        if not request.text and not request.audio:
+            raise HTTPException(status_code=400, detail="text or audio is required")
+
+        # For this MVP we only handle text. Audio-to-text handled in a later step.
+        text = request.text or ""
+        result = runner.run(text)
+        return result
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
