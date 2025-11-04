@@ -1,8 +1,38 @@
-from tools.agent_tools import security_validate
-from agents import Agent
+from agents import Agent, function_tool
+from typing import Dict, Any, Optional
+import re
+
+@function_tool
+def security_validate(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
+    """Basic security checks: destination format, positive amounts, known assets."""
+    reasons = []
+    valid = True
+
+    action = intent_action
+    asset = intent_asset
+    amount = intent_amount
+    dest = intent_destination
+
+    if action not in {"buy", "sell", "transfer"}:
+        valid = False
+        reasons.append("Unsupported action")
+
+    if asset and asset not in {"USDC", "ETH", "BTC"}:
+        valid = False
+        reasons.append("Unsupported asset")
+
+    if amount is not None and amount <= 0:
+        valid = False
+        reasons.append("Amount must be positive")
+
+    if action == "transfer" and (not dest or not re.match(r"^0x[a-f0-9]{6,}$", dest)):
+        valid = False
+        reasons.append("Invalid destination address")
+
+    return {"valid": valid, "reasons": reasons}
+
 
 def build_security_validator_agent() -> Agent:
-    sec_tool = security_validate
     instructions = (
         "You are the Security Validator. Use the provided tool to validate destination addresses, "
         "amount ranges, and supported assets."
@@ -10,7 +40,7 @@ def build_security_validator_agent() -> Agent:
     agent = Agent(
         name="SecurityValidatorAgent",
         instructions=instructions,
-        tools=[sec_tool],
+        tools=[security_validate],
         model="gpt-4o-mini",
     )
     return agent

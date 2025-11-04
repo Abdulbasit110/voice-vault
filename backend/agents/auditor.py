@@ -15,7 +15,6 @@ def build_auditor_agent() -> Agent:
     agent = Agent(
     name="AuditorAgent",
     instructions=AUDITOR_PROMPT,
-    output_type=AuditorSummary,
     tools=[audit_tool],
     )
     return agent

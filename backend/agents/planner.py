@@ -1,6 +1,6 @@
-from tools.agent_tools import parse_natural_command
 from pydantic import BaseModel
-from agents import Agent
+from agents import Agent, function_tool
+import re
 
 PROMPT = (
     "You are a financial research planner. Given a request for financial analysis, "
@@ -10,26 +10,61 @@ PROMPT = (
 )
 
 
-class FinancialSearchItem(BaseModel):
-    reason: str
-    """Your reasoning for why this search is relevant."""
+class ParsedCommand(BaseModel):
+    action: str | None = None        # buy | sell | transfer
+    asset: str | None = None         # eth | btc | usdc
+    amount: float | None = None      # numeric absolute amount
+    percent: float | None = None     # numeric percentage (0-100)
+    destination: str | None = None   # address for transfers
+    raw: str | None = None           # original text
 
-    query: str
-    """The search term to feed into a web (or file) search."""
 
+@function_tool
+def parse_natural_command(command_text: str) -> ParsedCommand:
+    """Parse a simple NL command into a structured intent."""
 
-class FinancialSearchPlan(BaseModel):
-    searches: list[FinancialSearchItem]
-    """A list of searches to perform."""
+    text = (command_text or "").strip().lower()
 
+    # Initialize a model instance
+    intent = ParsedCommand(raw=command_text or "")
+
+    # Basic action
+    if text.startswith("buy "):
+        intent.action = "buy"
+    elif text.startswith("sell "):
+        intent.action = "sell"
+    elif text.startswith("transfer "):
+        intent.action = "transfer"
+
+    # Percent e.g., "10%"
+    m_pct = re.search(r"(\d+(?:\.\d+)?)%", text)
+    if m_pct:
+        intent.percent = float(m_pct.group(1))
+
+    # Amount e.g., "0.5" or "100"
+    m_amt = re.search(r"\b(\d+(?:\.\d+)?)\b", text)
+    if m_amt:
+        intent.amount = float(m_amt.group(1))
+
+    # Asset detection
+    for sym in ["eth", "btc", "usdc"]:
+        if re.search(rf"\b{sym}\b", text):
+            intent.asset = sym.upper()
+            break
+
+    # Destination address
+    m_addr = re.search(r"0x[a-f0-9]{6,}", text)
+    if m_addr:
+        intent.destination = m_addr.group(0)
+
+    return ParsedCommand(raw=command_text or "", action=intent.action, asset=intent.asset, amount=intent.amount, percent=intent.percent, destination=intent.destination)
 
 def build_planner_agent() -> Agent:
-    parse_tool = parse_natural_command
     agent = Agent(
     name="PlannerAgent",
     instructions=PROMPT,
     model="o3-mini",
-    output_type=FinancialSearchPlan,
-    tools=[parse_tool],
+    tools=[parse_natural_command],
+    output_type=ParsedCommand,
     )
     return agent
