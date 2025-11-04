@@ -3,4 +3,5 @@ uvicorn[standard]
 python-dotenv
 pydantic
 requests
+elevenlabs
 
