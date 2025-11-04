@@ -5,6 +5,11 @@ from pydantic import BaseModel
 from typing import Optional
 import os
 from dotenv import load_dotenv
+from agents import Agent, Runner, function_tool
+import traceback
+
+
+
 
 # Load environment variables
 load_dotenv()
@@ -31,10 +36,10 @@ class TransactionResponse(BaseModel):
     status: str
     message: str
 
-class PortfolioResponse(BaseModel):
-    total_value: float
-    assets: list
-    allocations: dict
+# class PortfolioResponse(BaseModel):
+#     total_value: float
+#     assets: list
+#     allocations: dict
 
 # ElevenLabs API Models
 class STTRequest(BaseModel):
@@ -157,26 +162,57 @@ async def get_transactions():
         "total_count": 1
     }
 
+
+#  test
+
+class Weather(BaseModel):
+    city: str
+    temperature_range: str
+    conditions: str
+
+
+@function_tool
+def get_weather(city: str) -> Weather:
+    print("[debug] get_weather called")
+    return Weather(city=city, temperature_range="14-20C", conditions="Sunny with wind")
+
+story_agent = Agent(
+    name="story_agent",
+    instructions="Get the weather for the given city.",
+    output_type=str,
+    tools=[get_weather]
+)
+
+@app.post("/api/agents/test")
+async def test_agent(request: VoiceRequest):
+    result = await Runner.run(story_agent, request.text)
+    return result.final_output
+
 # Agent execution endpoint
 @app.post("/api/agents/execute")
 async def execute_with_agents(request: VoiceRequest):
+    print(request)
+    # return request
     """
-    Execute transaction using AI agent system (mocked execution)
+    Execute transaction using AI agent system (agent-based sequential workflow)
     """
     try:
-        from backend.services.agents_runner import AgenticFlowRunner
+        from services.agents_runner import AgentRunner
 
-        runner = AgenticFlowRunner()
-        if not request.text and not request.audio:
+        if not request.text:
             raise HTTPException(status_code=400, detail="text or audio is required")
 
-        # For this MVP we only handle text. Audio-to-text handled in a later step.
         text = request.text or ""
-        result = runner.run(text)
+        print(text, "going to the agent runner")
+        runner = AgentRunner()
+        result = await runner.run(text)
+        print(result, "result from the agent runner")
         return result
     except HTTPException:
         raise
     except Exception as e:
+        print("❌ Full error trace:")
+        traceback.print_exc()
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

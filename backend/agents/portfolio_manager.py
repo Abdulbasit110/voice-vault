@@ -1,27 +1,28 @@
-from typing import Dict, Any
+from agents import Agent, function_tool
 
-try:
-    from openai.types.beta.agents import Agent
-    from openai.resources.beta.agents import function_tool
-except Exception:  # pragma: no cover
-    Agent = object
-    def function_tool(*args, **kwargs):
-        return None
+instructions = (
+    "You are the Portfolio Manager. Retrieve current (mock) balances and allocations "
+    "via the provided tool and summarize key numbers for the other agents."
+)
 
-from backend.tools.agent_tools import get_mock_portfolio
-
+@function_tool
+def get_mock_portfolio() -> dict:
+    """Return a deterministic mock portfolio for validation (primitive-friendly schema)."""
+    return {
+        "total_value_usd": 18450.32,
+        # balances: [[symbol, amount, usd], ...]
+        "balances": [["USDC", 11070.19, 11070.19], ["ETH", 3.0, 4612.58], ["BTC", 0.08, 2767.55]],
+        # allocations_pct: [[symbol, percent], ...]
+        "allocations_pct": [["USDC", 60.0], ["ETH", 25.0], ["BTC", 15.0]],
+        # prices: [[symbol, price], ...]
+        "prices": [["USDC", 1.0], ["ETH", 1537.53], ["BTC", 34594.38]],
+    }
 
 def build_portfolio_manager_agent() -> Agent:
-    """Create Portfolio Manager agent exposing mock portfolio info."""
-    portfolio_tool = function_tool(get_mock_portfolio)
-
     agent = Agent(
-        name="PortfolioManager",
-        instructions=(
-            "You are the Portfolio Manager. Retrieve current (mock) balances and allocations "
-            "via the provided tool and summarize key numbers for the other agents."
-        ),
-        tools=[portfolio_tool],
+        name="PortfolioManagerAgent",
+        instructions=instructions,
+        tools=[get_mock_portfolio],
         model="gpt-4o-mini",
     )
     return agent

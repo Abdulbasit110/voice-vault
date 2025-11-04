@@ -4,4 +4,6 @@ python-dotenv
 pydantic
 requests
 elevenlabs
+pymongo
+openai-agents
 
