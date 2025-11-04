@@ -2,8 +2,7 @@ import uuid
 from agents import Agent, function_tool
 from typing import Dict, Any, Optional
 
-@function_tool
-def mock_execute_transaction(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
+def _mock_execute_transaction_impl(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
     """Return a dummy transaction result."""
     return {
         "transaction_id": f"mock_{uuid.uuid4().hex[:8]}",
@@ -15,6 +14,11 @@ def mock_execute_transaction(intent_action: Optional[str] = None, intent_asset: 
             "destination": intent_destination,
         },
     }
+
+@function_tool
+def mock_execute_transaction(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
+    """Return a dummy transaction result."""
+    return _mock_execute_transaction_impl(intent_action, intent_asset, intent_amount, intent_destination)
 
 
 def build_executor_agent() -> Agent:

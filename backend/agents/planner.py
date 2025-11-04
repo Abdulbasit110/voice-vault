@@ -1,22 +1,22 @@
 from pydantic import BaseModel
 from agents import Agent, function_tool
+from typing import Optional
 import re
 
 PROMPT = (
-    "You are a financial research planner. Given a request for financial analysis, "
-    "produce a set of web searches to gather the context needed. Aim for recent "
-    "headlines, earnings calls or 10‑K snippets, analyst commentary, and industry background. "
-    "Output between 5 and 15 search terms to query for."
+    "You are a command parser. Given a natural language command for a financial transaction, "
+    "use the parse_natural_command tool to extract the action (buy/sell/transfer), asset (ETH/BTC/USDC), "
+    "amount, percentage, and destination address. Return the parsed command structure."
 )
 
 
 class ParsedCommand(BaseModel):
-    action: str | None = None        # buy | sell | transfer
-    asset: str | None = None         # eth | btc | usdc
-    amount: float | None = None      # numeric absolute amount
-    percent: float | None = None     # numeric percentage (0-100)
-    destination: str | None = None   # address for transfers
-    raw: str | None = None           # original text
+    action: Optional[str] = None        # buy | sell | transfer
+    asset: Optional[str] = None         # eth | btc | usdc
+    amount: Optional[float] = None      # numeric absolute amount
+    percent: Optional[float] = None     # numeric percentage (0-100)
+    destination: Optional[str] = None   # address for transfers
+    raw: Optional[str] = None           # original text
 
 
 @function_tool
@@ -63,7 +63,7 @@ def build_planner_agent() -> Agent:
     agent = Agent(
     name="PlannerAgent",
     instructions=PROMPT,
-    model="o3-mini",
+    model="gpt-4o-mini",
     tools=[parse_natural_command],
     output_type=ParsedCommand,
     )

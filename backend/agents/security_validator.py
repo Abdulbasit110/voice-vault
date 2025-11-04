@@ -2,8 +2,7 @@ from agents import Agent, function_tool
 from typing import Dict, Any, Optional
 import re
 
-@function_tool
-def security_validate(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
+def _security_validate_impl(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
     """Basic security checks: destination format, positive amounts, known assets."""
     reasons = []
     valid = True
@@ -30,6 +29,11 @@ def security_validate(intent_action: Optional[str] = None, intent_asset: Optiona
         reasons.append("Invalid destination address")
 
     return {"valid": valid, "reasons": reasons}
+
+@function_tool
+def security_validate(intent_action: Optional[str] = None, intent_asset: Optional[str] = None, intent_amount: Optional[float] = None, intent_destination: Optional[str] = None) -> Dict[str, Any]:
+    """Basic security checks: destination format, positive amounts, known assets."""
+    return _security_validate_impl(intent_action, intent_asset, intent_amount, intent_destination)
 
 
 def build_security_validator_agent() -> Agent:

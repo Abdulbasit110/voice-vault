@@ -7,7 +7,7 @@ AUDITOR_PROMPT = (
 )
 
 class AuditorSummary(BaseModel):
-    summary: str
+    summary: str 
     """Short text summary for this aspect of the analysis."""
 
 def build_auditor_agent() -> Agent:

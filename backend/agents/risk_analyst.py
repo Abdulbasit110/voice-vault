@@ -1,20 +1,19 @@
 from agents import Agent, function_tool
-from typing import List, Optional
+from typing import List, Optional, Union
 
 RISK_PROMPT = (
     "You are a risk analyst validating transaction safety against simple limits. "
     "Decide approval and list human-readable reasons when blocked."
 )
 
-@function_tool
-def basic_risk_check(
+def _basic_risk_check_impl(
     intent_action: Optional[str] = None,
     intent_asset: Optional[str] = None,
-    intent_amount: Optional[float] = None,
+    intent_amount: Optional[float] = None, 
     intent_percent: Optional[float] = None,
     portfolio_total_value_usd: float = 0.0,
-    balances: List[List[float | str]] = [],
-    prices: List[List[float | str]] = [],
+    balances: List[List[Union[float, str]]] = [],
+    prices: List[List[Union[float, str]]] = [],
 ) -> dict:
     """Very simple thresholds-based risk gate.
     Rules:
@@ -63,6 +62,22 @@ def basic_risk_check(
             reasons.append("Transfer exceeds $5,000 limit")
 
     return {"approved": approved, "reasons": reasons}
+
+@function_tool
+def basic_risk_check(
+    intent_action: Optional[str] = None,
+    intent_asset: Optional[str] = None,
+    intent_amount: Optional[float] = None, 
+    intent_percent: Optional[float] = None,
+    portfolio_total_value_usd: float = 0.0,
+    balances: List[List[Union[float, str]]] = [],
+    prices: List[List[Union[float, str]]] = [],
+) -> dict:
+    """Very simple thresholds-based risk gate."""
+    return _basic_risk_check_impl(
+        intent_action, intent_asset, intent_amount, intent_percent,
+        portfolio_total_value_usd, balances, prices
+    )
 
 def build_risk_analyst_agent() -> Agent:
     agent = Agent(

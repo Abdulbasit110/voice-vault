@@ -5,4 +5,5 @@ pydantic
 requests
 pymongo
 openai-agents
+eval_type_backport
 
