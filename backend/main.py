@@ -1,5 +1,6 @@
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
 import os
@@ -19,7 +20,7 @@ app = FastAPI(title="VoiceVault API", version="1.0.0")
 # CORS middleware for Next.js frontend
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -40,6 +41,17 @@ class TransactionResponse(BaseModel):
 #     assets: list
 #     allocations: dict
 
+# ElevenLabs API Models
+class STTRequest(BaseModel):
+    audio: str  # Base64 encoded audio
+
+class STTResponse(BaseModel):
+    text: str
+
+class TTSRequest(BaseModel):
+    text: str
+    voice_id: Optional[str] = None
+
 # Health check endpoint
 @app.get("/")
 async def root():
@@ -48,6 +60,47 @@ async def root():
 @app.get("/health")
 async def health():
     return {"status": "healthy", "version": "1.0.0"}
+
+
+# ElevenLabs API Endpoints
+@app.post("/api/elevenlabs/stt", response_model=STTResponse)
+async def speech_to_text(request: STTRequest):
+    """
+    Convert audio to text using ElevenLabs Speech-to-Text API
+    """
+    try:
+        from utils.ElevenLabsSDK import get_elevenlabs_client
+        
+        client = get_elevenlabs_client()
+        text = client.convert_base64_audio_to_text(request.audio)
+        
+        return STTResponse(text=text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"STT Error: {str(e)}")
+
+@app.post("/api/elevenlabs/tts")
+async def text_to_speech(request: TTSRequest):
+    """
+    Convert text to speech using ElevenLabs Text-to-Speech API
+    """
+    try:
+        from utils.ElevenLabsSDK import get_elevenlabs_client
+        
+        client = get_elevenlabs_client()
+        audio_bytes = client.text_to_speech(text=request.text, voice_id=request.voice_id)
+        
+        return Response(
+            content=audio_bytes,
+            media_type="audio/mpeg",
+            headers={"Content-Disposition": "attachment; filename=speech.mp3"}
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"TTS Error: {str(e)}")
+        
 
 # Voice processing endpoint
 @app.post("/api/voice/process")
@@ -167,4 +220,5 @@ async def execute_with_agents(request: VoiceRequest):
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)
+
 

@@ -1,23 +1,195 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Mic, MicOff, Send } from "lucide-react"
 
 export function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState("")
+  const [isProcessing, setIsProcessing] = useState(false)
+  const [isPlaying, setIsPlaying] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const audioChunksRef = useRef<Blob[]>([])
+  const audioRef = useRef<HTMLAudioElement | null>(null)
 
-  const handleMicClick = () => {
-    setIsListening(!isListening)
-  }
+  // Check for MediaRecorder support on mount
+  useEffect(() => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      console.warn("MediaRecorder not supported in this browser")
+    }
+  }, [])
 
-  const handleSend = () => {
-    if (transcript.trim()) {
-      console.log("Sending:", transcript)
-      setTranscript("")
+  // Speech-to-Text function using ElevenLabs
+  const convertAudioToText = async (audioBlob: Blob): Promise<string> => {
+    try {
+      setIsProcessing(true)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+      // Convert blob to base64
+      const reader = new FileReader()
+      const base64Audio = await new Promise<string>((resolve, reject) => {
+        reader.onloadend = () => {
+          const base64String = reader.result as string
+          // Remove data:audio/wav;base64, prefix
+          const base64Data = base64String.split(",")[1]
+          resolve(base64Data)
+        }
+        reader.onerror = reject
+        reader.readAsDataURL(audioBlob)
+      })
+
+      // Call ElevenLabs STT API
+      const response = await fetch(`${apiUrl}/api/elevenlabs/stt`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ audio: base64Audio }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`STT API error: ${response.statusText}`)
+      }
+
+      const data = await response.json()
+      return data.text || ""
+    } catch (error) {
+      console.error("Error converting audio to text:", error)
+      throw error
+    } finally {
+      setIsProcessing(false)
     }
   }
+
+  // Text-to-Speech function
+  const speakText = async (text: string) => {
+    if (!text.trim()) return
+
+    try {
+      setIsPlaying(true)
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+
+      const response = await fetch(`${apiUrl}/api/elevenlabs/tts`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ text }),
+      })
+
+      if (!response.ok) {
+        throw new Error(`TTS API error: ${response.statusText}`)
+      }
+
+      // Get audio blob
+      const audioBlob = await response.blob()
+      const audioUrl = URL.createObjectURL(audioBlob)
+
+      // Create audio element and play
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+
+      const audio = new Audio(audioUrl)
+      audioRef.current = audio
+
+      audio.onended = () => {
+        setIsPlaying(false)
+        URL.revokeObjectURL(audioUrl)
+      }
+
+      audio.onerror = () => {
+        setIsPlaying(false)
+        URL.revokeObjectURL(audioUrl)
+        console.error("Error playing audio")
+      }
+
+      await audio.play()
+    } catch (error) {
+      console.error("Error with TTS:", error)
+      setIsPlaying(false)
+    }
+  }
+
+  const handleMicClick = async () => {
+    try {
+      if (isListening) {
+        // Stop recording
+        if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop()
+        }
+        setIsListening(false)
+      } else {
+        // Start recording
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+        const mediaRecorder = new MediaRecorder(stream)
+        mediaRecorderRef.current = mediaRecorder
+        audioChunksRef.current = []
+
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) {
+            audioChunksRef.current.push(event.data)
+          }
+        }
+
+        mediaRecorder.onstop = async () => {
+          // Stop all tracks
+          stream.getTracks().forEach((track) => track.stop())
+
+          // Create audio blob
+          const audioBlob = new Blob(audioChunksRef.current, { type: "audio/webm" })
+
+          try {
+            // Convert to text using ElevenLabs STT
+            const text = await convertAudioToText(audioBlob)
+            setTranscript((prev) => prev + (prev ? " " : "") + text)
+          } catch (error) {
+            console.error("Failed to convert audio to text:", error)
+            alert("Failed to convert speech to text. Please try again.")
+          }
+        }
+
+        mediaRecorder.start()
+        setIsListening(true)
+      }
+    } catch (error) {
+      console.error("Error accessing microphone:", error)
+      alert("Failed to access microphone. Please check permissions.")
+      setIsListening(false)
+    }
+  }
+
+  const handleSend = async () => {
+    if (transcript.trim()) {
+      console.log("Sending:", transcript)
+      const textToSend = transcript
+      setTranscript("")
+      if (isListening) {
+        setIsListening(false)
+        if (mediaRecorderRef.current) {
+          mediaRecorderRef.current.stop()
+        }
+      }
+
+      // Convert text to speech and play
+      await speakText(textToSend)
+    }
+  }
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (mediaRecorderRef.current) {
+        mediaRecorderRef.current.stop()
+      }
+      if (audioRef.current) {
+        audioRef.current.pause()
+        audioRef.current = null
+      }
+    }
+  }, [])
 
   return (
     <motion.div
@@ -41,6 +213,7 @@ export function VoiceAssistant() {
           {/* Microphone Button - Hero Element */}
           <motion.button
             onClick={handleMicClick}
+            disabled={isProcessing}
             whileHover={{ scale: 1.1 }}
             whileTap={{ scale: 0.95 }}
             animate={isListening ? { scale: [1, 1.05, 1] } : {}}
@@ -49,7 +222,7 @@ export function VoiceAssistant() {
               isListening
                 ? "bg-gradient-to-br from-blue-400 to-blue-600 shadow-lg shadow-blue-500/50"
                 : "bg-gradient-to-br from-purple-500 to-purple-700 hover:shadow-lg hover:shadow-purple-500/50"
-            }`}
+            } ${isProcessing ? "opacity-50 cursor-not-allowed" : ""}`}
           >
             {/* Ripple Effect */}
             {isListening && (
@@ -76,14 +249,28 @@ export function VoiceAssistant() {
 
           {/* Status Text */}
           <div className="text-center">
-            <h3 className="text-2xl font-bold text-white mb-2">{isListening ? "Listening..." : "Voice Assistant"}</h3>
+            <h3 className="text-2xl font-bold text-white mb-2">
+              {isListening
+                ? "Recording..."
+                : isProcessing
+                ? "Processing..."
+                : isPlaying
+                ? "Speaking..."
+                : "Voice Assistant"}
+            </h3>
             <p className="text-purple-300 text-sm">
-              {isListening ? "Speak your command or question" : "Click the microphone to start"}
+              {isListening
+                ? "Click mic again to stop and convert to text"
+                : isProcessing
+                ? "Converting speech to text..."
+                : isPlaying
+                ? "Playing audio response"
+                : "Click the microphone to start recording"}
             </p>
           </div>
 
           {/* Waveform Visualization */}
-          {isListening && (
+          {(isListening || isProcessing) && (
             <div className="flex items-center gap-1 h-12">
               {[...Array(5)].map((_, i) => (
                 <motion.div
