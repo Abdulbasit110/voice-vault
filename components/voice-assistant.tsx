@@ -3,12 +3,19 @@
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Mic, MicOff, Send } from "lucide-react"
+import * as Dialog from "@radix-ui/react-dialog"
+import { TransactionConfirm } from "@/components/transaction-confirm"
+
+const STORAGE_KEY = 'voicevault_user_id'
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
 export function VoiceAssistant() {
   const [isListening, setIsListening] = useState(false)
   const [transcript, setTranscript] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
+  const [showTransactionConfirm, setShowTransactionConfirm] = useState(false)
+  const [transactionData, setTransactionData] = useState<any>(null)
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
@@ -173,9 +180,63 @@ export function VoiceAssistant() {
         }
       }
 
-      // Convert text to speech and play
-      await speakText(textToSend)
+      setIsProcessing(true)
+      
+      try {
+        // Get user_id from localStorage
+        const userId = localStorage.getItem(STORAGE_KEY)
+        
+        // Call agent endpoint
+        const response = await fetch(
+          `${API_URL}/api/agents/execute${userId ? `?user_id=${userId}` : ''}`,
+          {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ text: textToSend }),
+          }
+        )
+
+        if (!response.ok) {
+          throw new Error(`Agent API error: ${response.statusText}`)
+        }
+
+        const result = await response.json()
+        console.log("Agent result:", result)
+
+        // Check if transaction requires confirmation
+        if (result.requires_confirmation && result.challenge_id) {
+          setTransactionData({
+            challengeId: result.challenge_id,
+            appId: result.app_id,
+            userToken: result.user_token,
+            encryptionKey: result.encryption_key,
+            transactionDetails: result.echo_intent || {}
+          })
+          setShowTransactionConfirm(true)
+          
+          // Speak confirmation message
+          await speakText(result.message || "Please confirm the transaction with your PIN.")
+        } else {
+          // No confirmation needed, just speak the response
+          const responseText = result.message || result.status || "Transaction processed."
+          await speakText(responseText)
+        }
+      } catch (error) {
+        console.error("Error calling agent:", error)
+        await speakText("Sorry, I encountered an error processing your request.")
+      } finally {
+        setIsProcessing(false)
+      }
     }
+  }
+
+  const handleTransactionComplete = () => {
+    setShowTransactionConfirm(false)
+    setTransactionData(null)
+    // Trigger dashboard refresh by reloading page or emitting event
+    window.location.reload()
   }
 
   // Cleanup on unmount
@@ -308,6 +369,26 @@ export function VoiceAssistant() {
           </div>
         </div>
       </div>
+
+      {/* Transaction Confirmation Modal */}
+      <Dialog.Root open={showTransactionConfirm} onOpenChange={setShowTransactionConfirm}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg p-6">
+            {transactionData && (
+              <TransactionConfirm
+                challengeId={transactionData.challengeId}
+                appId={transactionData.appId}
+                userToken={transactionData.userToken}
+                encryptionKey={transactionData.encryptionKey}
+                transactionDetails={transactionData.transactionDetails}
+                onComplete={handleTransactionComplete}
+                onClose={() => setShowTransactionConfirm(false)}
+              />
+            )}
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </motion.div>
   )
 }

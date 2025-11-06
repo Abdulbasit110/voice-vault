@@ -1,6 +1,7 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
+import * as Dialog from "@radix-ui/react-dialog"
 import { Sidebar } from "@/components/sidebar"
 import { Header } from "@/components/header"
 import { VoiceAssistant } from "@/components/voice-assistant"
@@ -9,9 +10,28 @@ import { AssetList } from "@/components/asset-list"
 import { TransactionHistory } from "@/components/transaction-history"
 import { RiskAnalysis } from "@/components/risk-analysis"
 import { AIInsights } from "@/components/ai-insights"
+import { WalletSetup } from "@/components/wallet-setup"
+
+const STORAGE_KEY = 'voicevault_user_id'
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
+  const [showWalletSetup, setShowWalletSetup] = useState(false)
+
+  // Check if wallet exists on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const userId = localStorage.getItem(STORAGE_KEY)
+      if (!userId) {
+        setShowWalletSetup(true)
+      }
+    }
+  }, [])
+
+  const handleWalletCreated = (walletAddress: string) => {
+    console.log('Wallet created:', walletAddress)
+    setShowWalletSetup(false)
+  }
 
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900">
@@ -49,6 +69,19 @@ export default function Dashboard() {
           </div>
         </main>
       </div>
+
+      {/* Wallet Setup Modal */}
+      <Dialog.Root open={showWalletSetup} onOpenChange={setShowWalletSetup}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg p-6">
+            <WalletSetup 
+              onWalletCreated={handleWalletCreated}
+              onClose={() => setShowWalletSetup(false)}
+            />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
     </div>
   )
 }

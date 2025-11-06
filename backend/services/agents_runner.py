@@ -1,4 +1,4 @@
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import asyncio
 from Agents.planner import build_planner_agent
@@ -44,9 +44,10 @@ class AgentRunner:
 		self.executor_agent = build_executor_agent()
 		self.auditor_agent = build_auditor_agent()
 
-	async def run(self, user_text: str):
+	async def run(self, user_text: str, user_id: Optional[str] = None):
 		print("running the agent runner")
 		print(user_text)
+		print(f"user_id: {user_id}")
 
 		# 1. Planner
 		try:
@@ -161,12 +162,13 @@ class AgentRunner:
 				intent_amount = getattr(planner_out, "amount", None)
 				intent_destination = getattr(planner_out, "destination", None)
 
-			from Agents.executor import _mock_execute_transaction_impl
-			exec_out = _mock_execute_transaction_impl(
+			from Agents.executor import _execute_transaction_impl
+			exec_out = _execute_transaction_impl(
 				intent_action=intent_action,
 				intent_asset=intent_asset,
 				intent_amount=intent_amount,
 				intent_destination=intent_destination,
+				user_id=user_id,
 			)
 			print("exec_out", exec_out)
 		except Exception as e:
