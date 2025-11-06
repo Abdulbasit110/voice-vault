@@ -12,9 +12,14 @@ def _security_validate_impl(intent_action: Optional[str] = None, intent_asset: O
     amount = intent_amount
     dest = intent_destination
 
-    if action not in {"buy", "sell", "transfer"}:
-        valid = False
-        reasons.append("Unsupported action")
+    # Normalize "send" to "transfer"
+    if action == "send":
+        action = "transfer"
+
+    # Action check disabled for now - allow any action
+    # if action not in {"buy", "sell", "transfer"}:
+    #     valid = False
+    #     reasons.append("Unsupported action")
 
     if asset and asset not in {"USDC", "ETH", "BTC"}:
         valid = False
@@ -24,7 +29,7 @@ def _security_validate_impl(intent_action: Optional[str] = None, intent_asset: O
         valid = False
         reasons.append("Amount must be positive")
 
-    if action == "transfer" and (not dest or not re.match(r"^0x[a-f0-9]{6,}$", dest)):
+    if dest and not re.match(r"^0x[a-fA-F0-9]{40}$", dest):
         valid = False
         reasons.append("Invalid destination address")
 

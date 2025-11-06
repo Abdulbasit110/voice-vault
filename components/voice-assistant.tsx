@@ -204,9 +204,16 @@ export function VoiceAssistant() {
 
         const result = await response.json()
         console.log("Agent result:", result)
+        console.log("Checking for transaction confirmation:", {
+          requires_confirmation: result.requires_confirmation,
+          challenge_id: result.challenge_id,
+          has_app_id: !!result.app_id,
+          has_user_token: !!result.user_token
+        })
 
         // Check if transaction requires confirmation
         if (result.requires_confirmation && result.challenge_id) {
+          console.log("Setting up transaction confirmation modal")
           setTransactionData({
             challengeId: result.challenge_id,
             appId: result.app_id,
@@ -215,17 +222,20 @@ export function VoiceAssistant() {
             transactionDetails: result.echo_intent || {}
           })
           setShowTransactionConfirm(true)
-          
-          // Speak confirmation message
-          await speakText(result.message || "Please confirm the transaction with your PIN.")
+          console.log("Transaction confirmation modal should be visible now")
+          // Don't call TTS for transaction confirmations - just show the modal
         } else {
-          // No confirmation needed, just speak the response
-          const responseText = result.message || result.status || "Transaction processed."
-          await speakText(responseText)
+          // No confirmation needed
+          // TTS disabled for now
+          // const responseText = result.message || result.status || "Transaction processed."
+          // await speakText(responseText)
         }
       } catch (error) {
         console.error("Error calling agent:", error)
-        await speakText("Sorry, I encountered an error processing your request.")
+        // TTS disabled for now
+        // if (!showTransactionConfirm) {
+        //   await speakText("Sorry, I encountered an error processing your request.")
+        // }
       } finally {
         setIsProcessing(false)
       }
@@ -371,11 +381,11 @@ export function VoiceAssistant() {
       </div>
 
       {/* Transaction Confirmation Modal */}
-      <Dialog.Root open={showTransactionConfirm} onOpenChange={setShowTransactionConfirm}>
-        <Dialog.Portal>
-          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
-          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg p-6">
-            {transactionData && (
+      {showTransactionConfirm && transactionData && (
+        <Dialog.Root open={showTransactionConfirm} onOpenChange={setShowTransactionConfirm}>
+          <Dialog.Portal>
+            <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]" />
+            <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[101] w-full max-w-lg p-6">
               <TransactionConfirm
                 challengeId={transactionData.challengeId}
                 appId={transactionData.appId}
@@ -385,10 +395,10 @@ export function VoiceAssistant() {
                 onComplete={handleTransactionComplete}
                 onClose={() => setShowTransactionConfirm(false)}
               />
-            )}
-          </Dialog.Content>
-        </Dialog.Portal>
-      </Dialog.Root>
+            </Dialog.Content>
+          </Dialog.Portal>
+        </Dialog.Root>
+      )}
     </motion.div>
   )
 }

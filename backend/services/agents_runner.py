@@ -171,12 +171,19 @@ class AgentRunner:
 				user_id=user_id,
 			)
 			print("exec_out", exec_out)
+			
+			# If transaction requires confirmation (PIN), return executor output directly
+			# Don't run auditor until transaction is actually completed
+			if isinstance(exec_out, dict) and exec_out.get("requires_confirmation"):
+				print("Transaction requires PIN confirmation, returning executor output")
+				return exec_out
 		except Exception as e:
 			print(e)
 			print("error in the executor agent")
 			return {"error": str(e)}
 
-		# 6. Auditor - bypass agent framework
+		# 6. Auditor - only runs if transaction doesn't require confirmation
+		# (i.e., for mock/completed transactions)
 		try:
 			print("running the auditor agent")
 			tx_id = None

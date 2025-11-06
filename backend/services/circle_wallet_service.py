@@ -218,8 +218,53 @@ class CircleWalletService:
             "idempotencyKey": str(uuid.uuid4()),
             "walletId": wallet_id,
             "destinationAddress": destination_address,
-            "amounts": [amount],
+            "amounts": [amount],  # Amount in decimal format (e.g., "0.1" for 0.1 USDC)
             "tokenId": token_id,
+            "feeLevel": fee_level
+        }
+        
+        headers = {**self.headers, "X-User-Token": user_token}
+        
+        response = requests.post(url, json=payload, headers=headers)
+        response.raise_for_status()
+        
+        return response.json()["data"]
+    
+    def create_transfer_challenge_with_address(
+        self,
+        user_token: str,
+        wallet_id: str,
+        destination_address: str,
+        amount: str,
+        token_address: str,
+        blockchain: str,
+        fee_level: str = "HIGH"
+    ) -> Dict[str, Any]:
+        """
+        Create a transfer challenge using tokenAddress + blockchain (alternative to tokenId)
+        Requires user_token for authentication
+        
+        Args:
+            user_token: User session token
+            wallet_id: Source wallet ID
+            destination_address: Recipient address
+            amount: Amount in token units (string, e.g., "1000000" for 1 USDC with 6 decimals)
+            token_address: Token contract address (e.g., USDC address)
+            blockchain: Blockchain network (e.g., "ETH-SEPOLIA")
+            fee_level: Fee level (LOW, MEDIUM, HIGH) - default HIGH
+        
+        Returns:
+            Challenge data with challengeId
+        """
+        url = f"{self.base_url}/user/transactions/transfer"
+        
+        payload = {
+            "idempotencyKey": str(uuid.uuid4()),
+            "walletId": wallet_id,
+            "destinationAddress": destination_address,
+            "amounts": [amount],  # Amount in decimal format (e.g., "0.1" for 0.1 USDC)
+            "tokenAddress": token_address,
+            "blockchain": blockchain,
             "feeLevel": fee_level
         }
         
