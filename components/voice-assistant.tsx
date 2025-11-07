@@ -3,8 +3,7 @@
 import { useState, useEffect, useRef } from "react"
 import { motion } from "framer-motion"
 import { Mic, MicOff, Send } from "lucide-react"
-import * as Dialog from "@radix-ui/react-dialog"
-import { TransactionConfirm } from "@/components/transaction-confirm"
+import { W3SSdk } from '@circle-fin/w3s-pw-web-sdk'
 
 const STORAGE_KEY = 'voicevault_user_id'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
@@ -20,8 +19,6 @@ export function VoiceAssistant() {
   const [transcript, setTranscript] = useState("")
   const [isProcessing, setIsProcessing] = useState(false)
   const [isPlaying, setIsPlaying] = useState(false)
-  const [showTransactionConfirm, setShowTransactionConfirm] = useState(false)
-  const [transactionData, setTransactionData] = useState<any>(null)
   const [availableContacts, setAvailableContacts] = useState<Contact[]>([])
   const [showContactSelect, setShowContactSelect] = useState(false)
   const [pendingEnhancedQuery, setPendingEnhancedQuery] = useState<string>("")
@@ -34,6 +31,19 @@ export function VoiceAssistant() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const audioChunksRef = useRef<Blob[]>([])
   const audioRef = useRef<HTMLAudioElement | null>(null)
+  const circleSdkRef = useRef<W3SSdk | null>(null)
+
+  // Initialize Circle SDK on mount
+  useEffect(() => {
+    if (!circleSdkRef.current) {
+      try {
+        circleSdkRef.current = new W3SSdk()
+        console.log("Circle SDK initialized")
+      } catch (error) {
+        console.error("Failed to initialize Circle SDK:", error)
+      }
+    }
+  }, [])
 
   // Check for MediaRecorder support on mount
   useEffect(() => {
@@ -498,18 +508,47 @@ export function VoiceAssistant() {
 
         // Check if transaction requires confirmation
         if (result.requires_confirmation && result.challenge_id) {
-          console.log("Setting up transaction confirmation modal")
-          setTransactionData({
-            challengeId: result.challenge_id,
-            appId: result.app_id,
-            userToken: result.user_token,
-            encryptionKey: result.encryption_key,
-            transactionDetails: result.echo_intent || {}
-          })
-          setShowTransactionConfirm(true)
-          console.log("Transaction confirmation modal should be visible now")
+          console.log("Transaction requires confirmation - triggering Circle SDK popup")
           
-          // Speak message if available (even for confirmations)
+          // Trigger Circle SDK popup
+          if (circleSdkRef.current && result.app_id && result.user_token && result.encryption_key) {
+            try {
+              // Configure SDK
+              circleSdkRef.current.setAppSettings({ appId: result.app_id })
+              circleSdkRef.current.setAuthentication({
+                userToken: result.user_token,
+                encryptionKey: result.encryption_key
+              })
+              
+              // Execute the challenge - SDK will show its own popup
+              circleSdkRef.current.execute(result.challenge_id, (error, sdkResult) => {
+                if (error) {
+                  console.error('Transaction confirmation error:', error)
+                  speakText(`Transaction failed: ${error.message || 'Confirmation failed'}`)
+                } else {
+                  console.log('Transaction confirmed successfully:', sdkResult)
+                  speakText("Transaction confirmed successfully!")
+                  // Optionally refresh the page or update UI
+                  setTimeout(() => {
+                    window.location.reload()
+                  }, 2000)
+                }
+              })
+            } catch (err) {
+              console.error('Error executing Circle SDK:', err)
+              speakText("Failed to open transaction confirmation. Please try again.")
+            }
+          } else {
+            console.error("Circle SDK or required data not available", {
+              hasSdk: !!circleSdkRef.current,
+              hasAppId: !!result.app_id,
+              hasUserToken: !!result.user_token,
+              hasEncryptionKey: !!result.encryption_key
+            })
+            speakText("Transaction confirmation setup failed. Please try again.")
+          }
+          
+          // Speak message if available
           if (result.message) {
             await speakText(result.message)
           }
@@ -530,21 +569,13 @@ export function VoiceAssistant() {
       } catch (error) {
         console.error("Error calling agent:", error)
         // Speak error message
-        if (!showTransactionConfirm) {
-          await speakText("Sorry, I encountered an error processing your request. Please try again.")
-        }
+        await speakText("Sorry, I encountered an error processing your request. Please try again.")
       } finally {
         setIsProcessing(false)
       }
     }
   }
 
-  const handleTransactionComplete = () => {
-    setShowTransactionConfirm(false)
-    setTransactionData(null)
-    // Trigger dashboard refresh by reloading page or emitting event
-    window.location.reload()
-  }
 
   // Cleanup on unmount
   useEffect(() => {
@@ -761,25 +792,6 @@ export function VoiceAssistant() {
         </div>
       </div>
 
-      {/* Transaction Confirmation Modal */}
-      {showTransactionConfirm && transactionData && (
-        <Dialog.Root open={showTransactionConfirm} onOpenChange={setShowTransactionConfirm}>
-          <Dialog.Portal>
-            <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-[100]" />
-            <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-[101] w-full max-w-lg p-6">
-              <TransactionConfirm
-                challengeId={transactionData.challengeId}
-                appId={transactionData.appId}
-                userToken={transactionData.userToken}
-                encryptionKey={transactionData.encryptionKey}
-                transactionDetails={transactionData.transactionDetails}
-                onComplete={handleTransactionComplete}
-                onClose={() => setShowTransactionConfirm(false)}
-              />
-            </Dialog.Content>
-          </Dialog.Portal>
-        </Dialog.Root>
-      )}
     </motion.div>
   )
 }

@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { motion } from "framer-motion"
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip } from "recharts"
-import { TrendingUp, Loader2 } from "lucide-react"
+import { TrendingUp, Loader2, Wallet, Copy, Check } from "lucide-react"
 
 const STORAGE_KEY = 'voicevault_user_id'
 const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
@@ -33,6 +33,10 @@ export function PortfolioOverview() {
   const [totalValue, setTotalValue] = useState(0)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [walletId, setWalletId] = useState<string | null>(null)
+  const [walletAddress, setWalletAddress] = useState<string | null>(null)
+  const [copiedId, setCopiedId] = useState(false)
+  const [copiedAddress, setCopiedAddress] = useState(false)
   const change24h = 0.0 // Would require price history API
 
   useEffect(() => {
@@ -59,12 +63,17 @@ export function PortfolioOverview() {
         const data = await response.json()
         const tokenBalances: TokenBalance[] = data.tokenBalances || []
         
+        // Store wallet info
+        setWalletId(data.wallet_id || null)
+        setWalletAddress(data.wallet_address || null)
+        
         // Map token balances to portfolio data
+        // Note: Circle API returns amounts as decimal strings already (e.g., "19.33997")
         const assets: PortfolioAsset[] = tokenBalances
           .filter((tb: TokenBalance) => tb.token.symbol && parseFloat(tb.amount) > 0)
           .map((tb: TokenBalance) => {
-            const decimals = tb.token.decimals || 6
-            const amount = parseFloat(tb.amount) / Math.pow(10, decimals)
+            // Amount is already in decimal format from API
+            const amount = parseFloat(tb.amount)
             // For USDC, price is 1.0. For other tokens, we'd need price API
             const price = tb.token.symbol === 'USDC' ? 1.0 : 0
             const value = amount * price
@@ -122,6 +131,64 @@ export function PortfolioOverview() {
       transition={{ duration: 0.5, delay: 0.1 }}
       className="rounded-2xl bg-gradient-to-br from-slate-800/50 to-purple-900/50 border border-purple-500/30 backdrop-blur-xl p-6"
     >
+      {/* Wallet Info Section */}
+      {(walletId || walletAddress) && (
+        <div className="mb-6 pb-6 border-b border-purple-500/20">
+          <div className="flex items-center gap-2 mb-3">
+            <Wallet className="w-5 h-5 text-purple-400" />
+            <h3 className="text-purple-300 text-sm font-semibold">Wallet Information</h3>
+          </div>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {walletId && (
+              <div>
+                <p className="text-purple-400 text-xs mb-1">Wallet ID</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-white text-sm font-mono break-all">{walletId}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(walletId)
+                      setCopiedId(true)
+                      setTimeout(() => setCopiedId(false), 2000)
+                    }}
+                    className="p-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 transition-colors"
+                    title="Copy Wallet ID"
+                  >
+                    {copiedId ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-purple-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+            {walletAddress && (
+              <div>
+                <p className="text-purple-400 text-xs mb-1">Wallet Address</p>
+                <div className="flex items-center gap-2">
+                  <p className="text-white text-sm font-mono break-all">{walletAddress}</p>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(walletAddress)
+                      setCopiedAddress(true)
+                      setTimeout(() => setCopiedAddress(false), 2000)
+                    }}
+                    className="p-1.5 rounded-lg bg-purple-500/20 hover:bg-purple-500/30 transition-colors"
+                    title="Copy Wallet Address"
+                  >
+                    {copiedAddress ? (
+                      <Check className="w-4 h-4 text-green-400" />
+                    ) : (
+                      <Copy className="w-4 h-4 text-purple-400" />
+                    )}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+      
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {/* Left - Stats */}
         <div className="flex flex-col justify-center">

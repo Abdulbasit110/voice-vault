@@ -45,16 +45,17 @@ function mapCircleTransaction(circleTx: CircleTransaction): Transaction {
     type = circleTx.transactionType === 'INBOUND' ? 'receive' : 'transfer'
   }
   
-  // Get amount (USDC has 6 decimals, so divide by 1,000,000)
+  // Get amount - Circle API returns amounts as decimal strings already
   const amount = circleTx.amounts && circleTx.amounts.length > 0 
-    ? parseFloat(circleTx.amounts[0]) / 1_000_000 
+    ? parseFloat(circleTx.amounts[0])
     : 0
   
   // Format date
   const { date, time } = formatDate(circleTx.createDate)
   
-  // Map state to status
+  // Map state to status (Circle API returns "COMPLETE", not "COMPLETED")
   const statusMap: Record<string, string> = {
+    'COMPLETE': 'completed',
     'COMPLETED': 'completed',
     'PENDING': 'pending',
     'FAILED': 'failed',
