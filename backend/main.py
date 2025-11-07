@@ -19,9 +19,26 @@ load_dotenv()
 app = FastAPI(title="VoiceVault API", version="1.0.0")
 
 # CORS middleware for Next.js frontend
+# Allow Vercel deployment URLs
+cors_origins = [
+    "http://localhost:3000",
+    "http://127.0.0.1:3000",
+    "http://localhost:3001",
+    "http://127.0.0.1:3001",
+]
+
+# Add Vercel preview/production URLs if available
+vercel_url = os.getenv("VERCEL_URL")
+if vercel_url:
+    cors_origins.append(f"https://{vercel_url}")
+
+next_public_url = os.getenv("NEXT_PUBLIC_URL")
+if next_public_url:
+    cors_origins.append(next_public_url)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:3000", "http://127.0.0.1:3000", "http://localhost:3001", "http://127.0.0.1:3001"],
+    allow_origins=cors_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

@@ -7,4 +7,5 @@ pymongo
 openai-agents
 elevenlabs
 eval_type_backport
+mangum
 
