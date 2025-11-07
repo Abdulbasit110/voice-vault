@@ -58,7 +58,11 @@ class AgentRunner:
 		except Exception as e:
 			print("error in the planner agent")
 			print(e)
-			return {"error": str(e)}
+			return {
+				"error": str(e),
+				"message": f"Error parsing your request: {str(e)}",
+				"status": "failed"
+			}
 
 		# 2. Portfolio Manager - bypass agent framework to avoid dict.extend() error
 		try:
@@ -68,7 +72,11 @@ class AgentRunner:
 		except Exception as e:
 			print("error in the portfolio agent")
 			print(e)
-			return {"error": str(e)}
+			return {
+				"error": str(e),
+				"message": f"Error checking portfolio: {str(e)}",
+				"status": "failed"
+			}
 
 		# 3. Risk Analyst (expects intent + portfolio context) - bypass agent framework
 		try:
@@ -111,11 +119,20 @@ class AgentRunner:
 			)
 			print("risk_out", risk_out)
 			if isinstance(risk_out, dict) and not risk_out.get("approved", True):
+				# Add message to risk rejection
+				reasons = risk_out.get("reasons", [])
+				message = "Transaction rejected by risk analysis. " + "; ".join(reasons) if reasons else "Transaction rejected by risk analysis."
+				risk_out["message"] = message
+				risk_out["status"] = "rejected"
 				return risk_out
 		except Exception as e:
 			print("error in the risk agent")
 			print(e)
-			return {"error": str(e)}
+			return {
+				"error": str(e),
+				"message": f"Error in risk analysis: {str(e)}",
+				"status": "failed"
+			}
 
 		# 4. Security Validator (expects intent) - bypass agent framework
 		try:
@@ -141,11 +158,20 @@ class AgentRunner:
 			)
 			print("security_out", security_out)
 			if isinstance(security_out, dict) and not security_out.get("valid", True):
+				# Add message to security rejection
+				reasons = security_out.get("reasons", [])
+				message = "Transaction rejected by security validation. " + "; ".join(reasons) if reasons else "Transaction rejected by security validation."
+				security_out["message"] = message
+				security_out["status"] = "rejected"
 				return security_out
 		except Exception as e:
 			print(e)
 			print("error in the security agent")
-			return {"error": str(e)}
+			return {
+				"error": str(e),
+				"message": f"Error in security validation: {str(e)}",
+				"status": "failed"
+			}
 
 		# 5. Executor (uses intent) - bypass agent framework
 		try:
@@ -176,11 +202,38 @@ class AgentRunner:
 			# Don't run auditor until transaction is actually completed
 			if isinstance(exec_out, dict) and exec_out.get("requires_confirmation"):
 				print("Transaction requires PIN confirmation, returning executor output")
+				# Ensure message is present
+				if "message" not in exec_out or not exec_out.get("message"):
+					exec_out["message"] = "Transaction pending PIN confirmation. Please confirm to complete."
 				return exec_out
+			
+			# Check if executor failed
+			if isinstance(exec_out, dict):
+				exec_status = exec_out.get("status")
+				exec_error = exec_out.get("error")
+				
+				# If executor failed, return with message
+				if exec_status == "failed" or exec_error:
+					message = exec_error or "Transaction failed. Please check your wallet balance and try again."
+					return {
+						"transaction_id": None,
+						"confirmed": False,
+						"confirmation_hash": None,
+						"status": "failed",
+						"message": message,
+						"echo_intent": exec_out.get("echo_intent", {})
+					}
 		except Exception as e:
 			print(e)
 			print("error in the executor agent")
-			return {"error": str(e)}
+			return {
+				"transaction_id": None,
+				"confirmed": False,
+				"confirmation_hash": None,
+				"status": "failed",
+				"message": f"Error executing transaction: {str(e)}",
+				"error": str(e)
+			}
 
 		# 6. Auditor - only runs if transaction doesn't require confirmation
 		# (i.e., for mock/completed transactions)
@@ -195,9 +248,31 @@ class AgentRunner:
 			from tools.agent_tools import _mock_audit_transaction_impl
 			audit_out = _mock_audit_transaction_impl(tx_id)
 			print("audit_out", audit_out)
+			
+			# Add message to audit output
+			if isinstance(audit_out, dict):
+				if audit_out.get("confirmed"):
+					audit_out["message"] = "Transaction completed and confirmed successfully."
+				else:
+					audit_out["message"] = "Transaction is pending confirmation."
+			else:
+				# Convert to dict if needed
+				audit_out = {
+					"transaction_id": getattr(audit_out, "transaction_id", None),
+					"confirmed": getattr(audit_out, "confirmed", False),
+					"confirmation_hash": getattr(audit_out, "confirmation_hash", None),
+					"message": "Transaction completed and confirmed successfully." if getattr(audit_out, "confirmed", False) else "Transaction is pending confirmation."
+				}
 		except Exception as e:
 			print(e)
 			print("error in the auditor agent")
-			return {"error": str(e)}
+			return {
+				"transaction_id": None,
+				"confirmed": False,
+				"confirmation_hash": None,
+				"status": "failed",
+				"message": f"Error auditing transaction: {str(e)}",
+				"error": str(e)
+			}
 
 		return audit_out

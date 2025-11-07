@@ -11,12 +11,14 @@ import { TransactionHistory } from "@/components/transaction-history"
 import { RiskAnalysis } from "@/components/risk-analysis"
 import { AIInsights } from "@/components/ai-insights"
 import { WalletSetup } from "@/components/wallet-setup"
+import { AddContact } from "@/components/add-contact"
 
 const STORAGE_KEY = 'voicevault_user_id'
 
 export default function Dashboard() {
   const [sidebarOpen, setSidebarOpen] = useState(true)
   const [showWalletSetup, setShowWalletSetup] = useState(false)
+  const [showAddContact, setShowAddContact] = useState(false)
 
   // Check if wallet exists on mount
   useEffect(() => {
@@ -36,7 +38,11 @@ export default function Dashboard() {
   return (
     <div className="flex h-screen bg-gradient-to-br from-slate-950 via-purple-950 to-slate-900">
       {/* Sidebar */}
-      <Sidebar open={sidebarOpen} onToggle={setSidebarOpen} />
+      <Sidebar 
+        open={sidebarOpen} 
+        onToggle={setSidebarOpen}
+        onAddContact={() => setShowAddContact(true)}
+      />
 
       {/* Main Content */}
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -78,6 +84,21 @@ export default function Dashboard() {
             <WalletSetup 
               onWalletCreated={handleWalletCreated}
               onClose={() => setShowWalletSetup(false)}
+            />
+          </Dialog.Content>
+        </Dialog.Portal>
+      </Dialog.Root>
+
+      {/* Add Contact Modal */}
+      <Dialog.Root open={showAddContact} onOpenChange={setShowAddContact}>
+        <Dialog.Portal>
+          <Dialog.Overlay className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50" />
+          <Dialog.Content className="fixed top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg p-6">
+            <AddContact 
+              onClose={() => setShowAddContact(false)}
+              onSuccess={() => {
+                console.log("Contact added successfully")
+              }}
             />
           </Dialog.Content>
         </Dialog.Portal>

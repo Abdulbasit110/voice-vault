@@ -18,6 +18,58 @@ load_dotenv()
 # Initialize FastAPI app
 app = FastAPI(title="VoiceVault API", version="1.0.0")
 
+# Initialize MongoDB connection on startup
+@app.on_event("startup")
+async def startup_event():
+    """Initialize MongoDB connection when server starts"""
+    try:
+        from services.mongodb_service import MongoDBService
+        import os
+        
+        mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/voicevault")
+        # Mask password in URI for logging
+        print(mongodb_uri, "mongodb_uri")
+        safe_uri = mongodb_uri
+        if "@" in mongodb_uri:
+            parts = mongodb_uri.split("@")
+            if len(parts) == 2:
+                safe_uri = f"mongodb://***@{parts[1]}"
+        
+        print(f"🔌 Connecting to MongoDB...")
+        print(f"   URI: {safe_uri}")
+        
+        # Create singleton instance to establish connection
+        mongo = MongoDBService()
+        
+        # Test connection
+        mongo.client.admin.command('ping')
+        
+        # Get database info
+        db_name = mongo.db.name
+        server_info = mongo.client.server_info()
+        
+        print(f"✅ MongoDB connection established successfully!")
+        print(f"   Database: {db_name}")
+        print(f"   Server Version: {server_info.get('version', 'unknown')}")
+        print(f"   Collections: transactions, portfolios, audio_files, circle_users, contacts")
+    except Exception as e:
+        print(f"❌ MongoDB connection failed: {e}")
+        print(f"⚠️  Server will continue but MongoDB features may not work")
+        import traceback
+        traceback.print_exc()
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Close MongoDB connection when server shuts down"""
+    try:
+        from services.mongodb_service import MongoDBService
+        # Get the singleton instance and close connection
+        mongo = MongoDBService()
+        mongo.client.close()
+        print("✅ MongoDB connection closed")
+    except Exception as e:
+        print(f"⚠️  Error closing MongoDB connection: {e}")
+
 # CORS middleware for Next.js frontend
 # Allow Vercel deployment URLs
 cors_origins = [
@@ -70,6 +122,26 @@ class TTSRequest(BaseModel):
     text: str
     voice_id: Optional[str] = None
 
+# Contacts API Models
+class AddContactRequest(BaseModel):
+    wallet_address: str
+    name: str
+
+class ContactResponse(BaseModel):
+    id: str
+    wallet_address: str
+    name: str
+    created_at: str
+
+# Query Enhancement Models
+class EnhanceQueryRequest(BaseModel):
+    query: str
+
+class EnhanceQueryResponse(BaseModel):
+    enhanced_query: str
+    original_query: str
+    extracted_name: Optional[str] = None  # Name extracted from query (if any)
+
 # Wallet API Models
 class WalletCreateResponse(BaseModel):
     user_id: str
@@ -103,10 +175,22 @@ async def health():
 async def speech_to_text(request: STTRequest):
     """
     Convert audio to text using ElevenLabs Speech-to-Text API
+    Also saves audio to MongoDB for record keeping
     """
     try:
         from utils.ElevenLabsSDK import get_elevenlabs_client
+        from services.mongodb_service import MongoDBService
         
+        # Save audio to MongoDB first
+        mongo = MongoDBService()
+        audio_id = mongo.save_audio_base64(
+            request.audio,
+            user_id="default_user",  # TODO: Get from auth/session
+            metadata={"source": "stt", "format": "base64"}
+        )
+        print(f"✅ Audio saved to MongoDB with ID: {audio_id}")
+        
+        # Convert to text using ElevenLabs
         client = get_elevenlabs_client()
         text = client.convert_base64_audio_to_text(request.audio)
         
@@ -275,12 +359,26 @@ async def create_wallet(user_id: Optional[str] = Query(None, description="Option
         
         # Step 1: Create user
         try:
-            circle.create_user(user_id)
+            user_data = circle.create_user(user_id)
         except Exception as e:
             # User might already exist, continue
             error_str = str(e).lower()
             if "already exists" not in error_str and "409" not in error_str:
                 raise
+            user_data = None
+        
+        # Step 1.5: Save user to MongoDB immediately after creation
+        try:
+            from services.mongodb_service import MongoDBService
+            mongo = MongoDBService()
+            mongo.save_circle_user_initial(
+                user_id=user_id,
+                metadata={"circle_user_data": user_data} if user_data else {}
+            )
+            print(f"✅ Circle user saved to MongoDB: {user_id}")
+        except Exception as e:
+            print(f"⚠️  Failed to save Circle user to MongoDB: {e}")
+            # Don't fail the request if MongoDB save fails
         
         # Step 2: Get session token
         session = circle.get_session_token(user_id)
@@ -290,6 +388,40 @@ async def create_wallet(user_id: Optional[str] = Query(None, description="Option
             session["user_token"],
             blockchains=["ETH-SEPOLIA"]
         )
+        
+        # Step 4: Try to get wallet address and save to MongoDB (may not be available until PIN is confirmed)
+        try:
+            from services.mongodb_service import MongoDBService
+            wallets_response = circle.get_wallets(user_id)
+            print(f"🔍 Wallets response: {wallets_response}")
+            wallets = wallets_response.get("wallets", [])
+            
+            if wallets and len(wallets) > 0:
+                wallet = wallets[0]
+                wallet_address = wallet.get("address")
+                wallet_id = wallet.get("id")
+                blockchain = wallet.get("blockchain")
+                
+                if wallet_address:
+                    # Save to MongoDB if wallet address is available
+                    mongo = MongoDBService()
+                    mongo.save_circle_user(
+                        user_id=user_id,
+                        wallet_address=wallet_address,
+                        wallet_id=wallet_id,
+                        blockchain=blockchain,
+                        metadata={"app_id": circle.get_app_id()}
+                    )
+                    print(f"✅ Circle wallet saved to MongoDB: {user_id} -> {wallet_address}")
+                else:
+                    print(f"⚠️  Wallet created but address not yet available (PIN not confirmed): {user_id}")
+            else:
+                print(f"⚠️  No wallets found yet for user: {user_id} (will be available after PIN confirmation)")
+        except Exception as e:
+            print(f"⚠️  Failed to get/save wallet to MongoDB: {e}")
+            import traceback
+            traceback.print_exc()
+            # Don't fail the request if MongoDB save fails
         
         # Get App ID
         app_id = circle.get_app_id()
@@ -308,10 +440,12 @@ async def create_wallet(user_id: Optional[str] = Query(None, description="Option
 async def get_wallet_status(user_id: str = Query(..., description="User ID to check wallet status")):
     """
     Check if wallet exists and is ready
+    Also updates MongoDB with wallet address when wallet is found
     Returns: wallet info if exists, null if not
     """
     try:
         from services.circle_wallet_service import get_circle_service
+        from services.mongodb_service import MongoDBService
         
         circle = get_circle_service()
         wallets_response = circle.get_wallets(user_id)
@@ -321,6 +455,25 @@ async def get_wallet_status(user_id: str = Query(..., description="User ID to ch
             return WalletStatusResponse(exists=False, wallet=None)
         
         wallet = wallets[0]
+        wallet_address = wallet.get("address")
+        wallet_id = wallet.get("id")
+        blockchain = wallet.get("blockchain")
+        
+        # Update MongoDB with wallet address if available
+        if wallet_address:
+            try:
+                mongo = MongoDBService()
+                mongo.save_circle_user(
+                    user_id=user_id,
+                    wallet_address=wallet_address,
+                    wallet_id=wallet_id,
+                    blockchain=blockchain,
+                    metadata={"app_id": circle.get_app_id(), "updated_via": "status_check"}
+                )
+                print(f"✅ Wallet address updated in MongoDB: {user_id} -> {wallet_address}")
+            except Exception as e:
+                print(f"⚠️  Failed to update wallet in MongoDB: {e}")
+        
         return WalletStatusResponse(
             exists=True,
             wallet={
@@ -450,6 +603,154 @@ async def get_transaction(
         return transaction_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# Contacts Endpoints
+@app.post("/api/contacts/add")
+async def add_contact(
+    request: AddContactRequest,
+    user_id: str = Query(..., description="User ID from localStorage")
+):
+    """
+    Add a new contact for the user
+    """
+    try:
+        from services.mongodb_service import MongoDBService
+        import re
+        
+        # Validate wallet address format
+        if not re.match(r"^0x[a-fA-F0-9]{40}$", request.wallet_address):
+            raise HTTPException(status_code=400, detail="Invalid wallet address format")
+        
+        # Validate name
+        if not request.name or not request.name.strip():
+            raise HTTPException(status_code=400, detail="Name is required")
+        
+        mongo = MongoDBService()
+        contact_id = mongo.add_contact(
+            user_id=user_id,
+            wallet_address=request.wallet_address,
+            name=request.name.strip()
+        )
+        
+        return {
+            "success": True,
+            "contact_id": contact_id,
+            "message": "Contact added successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error adding contact: {str(e)}")
+
+@app.get("/api/contacts")
+async def get_contacts(
+    user_id: str = Query(..., description="User ID from localStorage"),
+    name: Optional[str] = Query(None, description="Optional: Search contacts by name")
+):
+    """
+    Get all contacts for a user, optionally filtered by name
+    """
+    try:
+        from services.mongodb_service import MongoDBService
+        
+        mongo = MongoDBService()
+        
+        # If name is provided, search by name; otherwise get all
+        if name:
+            contacts = mongo.search_contacts_by_name(user_id, name)
+        else:
+            contacts = mongo.get_contacts(user_id)
+        
+        # Convert ObjectId to string and format dates
+        formatted_contacts = []
+        for contact in contacts:
+            formatted_contacts.append({
+                "id": str(contact["_id"]),
+                "wallet_address": contact["wallet_address"],
+                "name": contact["name"],
+                "created_at": contact["created_at"].isoformat() if contact.get("created_at") else None
+            })
+        
+        return {
+            "contacts": formatted_contacts,
+            "count": len(formatted_contacts)
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error getting contacts: {str(e)}")
+
+# Query Enhancement Endpoint
+@app.post("/api/query/enhance", response_model=EnhanceQueryResponse)
+async def enhance_query(request: EnhanceQueryRequest):
+    """
+    Enhance and normalize user query to standard format
+    Converts queries like "send 100 rupees to 0x..." to "send 100 usdc to 0x..."
+    Uses simple LLM (not agents) for query normalization
+    """
+    try:
+        from openai import OpenAI
+        
+        api_key = os.getenv("OPENAI_API_KEY")
+        if not api_key:
+            raise HTTPException(status_code=500, detail="OPENAI_API_KEY not configured")
+        
+        client = OpenAI(api_key=api_key)
+        
+        prompt = f"""You are a query normalizer for cryptocurrency transactions. Your task is to normalize user queries into a standard format.
+
+Standard format: "send [amount] usdc to [wallet_address]"
+
+Rules:
+1. Always convert amounts to USDC (convert rupees, dollars, USD, etc. to USDC)
+2. Extract wallet addresses (they start with 0x and are 42 characters long)
+3. Always use the format: "send [amount] usdc to [wallet_address]"
+4. If no wallet address is found, keep the original query but normalize the currency to USDC
+5. Preserve the exact amount mentioned by the user
+6. Keep it simple and direct
+
+Examples:
+- "send 100 rupees to 0x1234..." → "send 100 usdc to 0x1234..."
+- "transfer 50 dollars to 0xabcd..." → "send 50 usdc to 0xabcd..."
+- "send 25 usdc to 0x5678..." → "send 25 usdc to 0x5678..."
+- "100 rupees to john" → "send 100 usdc to john" (if no address, keep name)
+
+User query: {request.query}
+
+Normalized query:"""
+        
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",  # Using mini for faster/cheaper responses
+            messages=[
+                {"role": "system", "content": "You are a query normalizer. Always respond with only the normalized query, nothing else."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.1,  # Low temperature for consistent formatting
+            max_tokens=100
+        )
+        
+        enhanced_query = response.choices[0].message.content.strip()
+        
+        # Extract name from query (if it's not a wallet address)
+        extracted_name = None
+        # Check if query contains a name (not a wallet address starting with 0x)
+        # Pattern: "send X usdc to [name]" where name is not a wallet address
+        import re
+        wallet_pattern = r"0x[a-fA-F0-9]{40}"
+        if not re.search(wallet_pattern, enhanced_query.lower()):
+            # Extract text after "to" - this might be a name
+            match = re.search(r"to\s+([^\s]+(?:\s+[^\s]+)*)", enhanced_query, re.IGNORECASE)
+            if match:
+                potential_name = match.group(1).strip()
+                # If it's not a number and not "usdc", it's likely a name
+                if not potential_name.replace(".", "").replace(",", "").isdigit() and potential_name.lower() != "usdc":
+                    extracted_name = potential_name
+        
+        return EnhanceQueryResponse(
+            enhanced_query=enhanced_query,
+            original_query=request.query,
+            extracted_name=extracted_name
+        )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error enhancing query: {str(e)}")
 
 if __name__ == "__main__":
     import uvicorn

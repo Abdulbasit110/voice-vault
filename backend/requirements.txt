@@ -5,6 +5,7 @@ pydantic
 requests
 pymongo
 openai-agents
+openai
 elevenlabs
 eval_type_backport
 

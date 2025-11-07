@@ -1,14 +1,15 @@
 "use client"
 
 import { motion } from "framer-motion"
-import { BarChart3, Wallet, Settings, LogOut, Home } from "lucide-react"
+import { BarChart3, Wallet, Settings, LogOut, Home, UserPlus } from "lucide-react"
 
 interface SidebarProps {
   open: boolean
   onToggle: (open: boolean) => void
+  onAddContact?: () => void
 }
 
-export function Sidebar({ open, onToggle }: SidebarProps) {
+export function Sidebar({ open, onToggle, onAddContact }: SidebarProps) {
   const menuItems = [
     { icon: Home, label: "Dashboard", active: true },
     { icon: Wallet, label: "Portfolio", active: false },
@@ -58,6 +59,17 @@ export function Sidebar({ open, onToggle }: SidebarProps) {
 
         {/* Footer */}
         <div className="p-4 border-t border-purple-500/20 space-y-2">
+          {onAddContact && (
+            <motion.button
+              onClick={onAddContact}
+              whileHover={{ scale: 1.02 }}
+              whileTap={{ scale: 0.98 }}
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-500 to-purple-600 text-white hover:shadow-lg hover:shadow-blue-500/50 transition-all"
+            >
+              <UserPlus className="w-5 h-5" />
+              <span className="font-medium">Add Contact</span>
+            </motion.button>
+          )}
           <button className="w-full flex items-center gap-3 px-4 py-3 rounded-lg text-purple-200 hover:bg-purple-500/10 transition-all">
             <LogOut className="w-5 h-5" />
             <span className="font-medium">Logout</span>
