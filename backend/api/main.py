@@ -12,9 +12,6 @@ import traceback
 # Add the backend directory to Python path for Vercel
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Import agents after path adjustment
-from agents import Agent, Runner, function_tool
-
 # Load environment variables
 load_dotenv()
 
@@ -291,26 +288,28 @@ async def get_transactions():
 
 #  test
 
-class Weather(BaseModel):
-    city: str
-    temperature_range: str
-    conditions: str
-
-
-@function_tool
-def get_weather(city: str) -> Weather:
-    print("[debug] get_weather called")
-    return Weather(city=city, temperature_range="14-20C", conditions="Sunny with wind")
-
-story_agent = Agent(
-    name="story_agent",
-    instructions="Get the weather for the given city.",
-    output_type=str,
-    tools=[get_weather]
-)
-
 @app.post("/api/agents/test")
 async def test_agent(request: VoiceRequest):
+    # Lazy import and initialization to avoid module-level crashes in Vercel
+    from agents import Agent, Runner, function_tool
+    
+    class Weather(BaseModel):
+        city: str
+        temperature_range: str
+        conditions: str
+
+    @function_tool
+    def get_weather(city: str) -> Weather:
+        print("[debug] get_weather called")
+        return Weather(city=city, temperature_range="14-20C", conditions="Sunny with wind")
+
+    story_agent = Agent(
+        name="story_agent",
+        instructions="Get the weather for the given city.",
+        output_type=str,
+        tools=[get_weather]
+    )
+    
     result = await Runner.run(story_agent, request.text)
     return result.final_output
 
