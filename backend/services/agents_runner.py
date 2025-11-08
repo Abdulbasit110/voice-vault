@@ -3,17 +3,17 @@ import sys
 from typing import Any, Dict, Optional
 import asyncio
 
-# Import agents SDK
+# Import agents SDK (OpenAI Agents package)
 from agents import Runner
 
-# Import agent builders
+# Import custom agent builders
 # Note: sys.path should already be configured by main.py
-from Agents.planner import build_planner_agent
-from Agents.portfolio_manager import build_portfolio_manager_agent
-from Agents.risk_analyst import build_risk_analyst_agent
-from Agents.security_validator import build_security_validator_agent
-from Agents.executor import build_executor_agent
-from Agents.auditor import build_auditor_agent
+from agent_definitions.planner import build_planner_agent
+from agent_definitions.portfolio_manager import build_portfolio_manager_agent
+from agent_definitions.risk_analyst import build_risk_analyst_agent
+from agent_definitions.security_validator import build_security_validator_agent
+from agent_definitions.executor import build_executor_agent
+from agent_definitions.auditor import build_auditor_agent
 
 async def run_with_retry(agent, input_data, max_retries=3, initial_delay=1):
 	"""Run an agent with retry logic for transient API errors."""
@@ -72,7 +72,7 @@ class AgentRunner:
 
 		# 2. Portfolio Manager - bypass agent framework to avoid dict.extend() error
 		try:
-			from Agents.portfolio_manager import _get_mock_portfolio_data
+			from agent_definitions.portfolio_manager import _get_mock_portfolio_data
 			portfolio_out = _get_mock_portfolio_data()
 			print("portfolio_out", portfolio_out)
 		except Exception as e:
@@ -113,7 +113,7 @@ class AgentRunner:
 				balances = getattr(portfolio_out, "balances", [])
 				prices = getattr(portfolio_out, "prices", [])
 
-			from Agents.risk_analyst import _basic_risk_check_impl
+			from agent_definitions.risk_analyst import _basic_risk_check_impl
 			risk_out = _basic_risk_check_impl(
 				intent_action=intent_action,
 				intent_asset=intent_asset,
@@ -155,7 +155,7 @@ class AgentRunner:
 				intent_amount = getattr(planner_out, "amount", None)
 				intent_destination = getattr(planner_out, "destination", None)
 
-			from Agents.security_validator import _security_validate_impl
+			from agent_definitions.security_validator import _security_validate_impl
 			security_out = _security_validate_impl(
 				intent_action=intent_action,
 				intent_asset=intent_asset,
@@ -194,7 +194,7 @@ class AgentRunner:
 				intent_amount = getattr(planner_out, "amount", None)
 				intent_destination = getattr(planner_out, "destination", None)
 
-			from Agents.executor import _execute_transaction_impl
+			from agent_definitions.executor import _execute_transaction_impl
 			exec_out = _execute_transaction_impl(
 				intent_action=intent_action,
 				intent_asset=intent_asset,
