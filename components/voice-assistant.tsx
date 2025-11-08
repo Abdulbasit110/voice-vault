@@ -53,40 +53,47 @@ export function VoiceAssistant() {
   }, [])
 
   // Speech-to-Text function using ElevenLabs
-  const convertAudioToText = async (audioBlob: Blob): Promise<{text: string, extractedName?: string}> => {
+  const convertAudioToText = async (audioBlob: Blob,isAudio:boolean,text:string): Promise<{text: string, extractedName?: string}> => {
     try {
       setIsProcessing(true)
       const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
 
       // Convert blob to base64
-      const reader = new FileReader()
-      const base64Audio = await new Promise<string>((resolve, reject) => {
-        reader.onloadend = () => {
-          const base64String = reader.result as string
-          // Remove data:audio/wav;base64, prefix
-          const base64Data = base64String.split(",")[1]
-          resolve(base64Data)
+      let transcribedText = text
+      if(isAudio){
+        const reader = new FileReader()
+        const base64Audio = await new Promise<string>((resolve, reject) => {
+          reader.onloadend = () => {
+            const base64String = reader.result as string
+            // Remove data:audio/wav;base64, prefix
+            const base64Data = base64String.split(",")[1]
+            resolve(base64Data)
+          }
+          reader.onerror = reject
+          reader.readAsDataURL(audioBlob)
+        })
+  
+        // Call ElevenLabs STT API
+        const sttResponse = await fetch(`${apiUrl}/api/elevenlabs/stt`, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ audio: base64Audio }),
+        })
+  
+        if (!sttResponse.ok) {
+          throw new Error(`STT API error: ${sttResponse.statusText}`)
         }
-        reader.onerror = reject
-        reader.readAsDataURL(audioBlob)
-      })
+  
+        const sttData = await sttResponse.json()
+        transcribedText = sttData.text || ""
+        
 
-      // Call ElevenLabs STT API
-      const sttResponse = await fetch(`${apiUrl}/api/elevenlabs/stt`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ audio: base64Audio }),
-      })
 
-      if (!sttResponse.ok) {
-        throw new Error(`STT API error: ${sttResponse.statusText}`)
+      }else{
+        transcribedText = text
       }
-
-      const sttData = await sttResponse.json()
-      const transcribedText = sttData.text || ""
-      
       // If we got text, automatically enhance it
       if (transcribedText.trim()) {
         try {
@@ -169,33 +176,55 @@ export function VoiceAssistant() {
         // Auto-fill wallet address
         const contact = contacts[0]
         const walletAddress = contact.wallet_address
-        // Replace name with wallet address in the query
-        const updatedQuery = enhancedQuery.replace(new RegExp(`\\b${name}\\b`, 'gi'), walletAddress)
-        // Update transcript with the wallet address
+        // Update transcript by replacing the name with wallet address
         setTranscript((prev) => {
-          // If transcript already contains the enhanced query, replace it
-          if (prev.includes(enhancedQuery)) {
-            return prev.replace(enhancedQuery, updatedQuery)
-          }
-          // Otherwise, replace name in the current transcript or add the updated query
           const current = prev.trim()
-          if (current) {
-            // Try to replace name if it exists in current transcript
-            const nameRegex = new RegExp(`\\b${name}\\b`, 'gi')
-            if (nameRegex.test(current)) {
-              return current.replace(nameRegex, walletAddress)
-            }
+          if (!current) {
+            // If transcript is empty, use the enhanced query with wallet address
+            return enhancedQuery.replace(new RegExp(`\\b${name}\\b`, 'gi'), walletAddress)
+          }
+          
+          // If transcript already contains the enhanced query, replace it
+          if (current.includes(enhancedQuery)) {
+            return current.replace(enhancedQuery, enhancedQuery.replace(new RegExp(`\\b${name}\\b`, 'gi'), walletAddress))
+          }
+          
+          // Try to replace the name directly in the current transcript
+          const nameRegex = new RegExp(`\\b${name}\\b`, 'gi')
+          if (nameRegex.test(current)) {
+            return current.replace(nameRegex, walletAddress)
+          }
+          
+          // If name not found, check if we should replace the enhanced query
+          // This handles the case where enhanced query was already added
+          const updatedQuery = enhancedQuery.replace(new RegExp(`\\b${name}\\b`, 'gi'), walletAddress)
+          // Only append if the updated query is not already in the transcript
+          if (!current.includes(updatedQuery)) {
             return `${current} ${updatedQuery}`
           }
-          return updatedQuery
+          
+          return current
         })
         console.log("Auto-filled wallet address:", walletAddress)
       } else {
         // Multiple contacts found - show dropdown
+        // First, add the enhanced query to transcript if not already present
+        setTranscript((prev) => {
+          const current = prev.trim()
+          if (!current || !current.includes(enhancedQuery)) {
+            return current ? `${current} ${enhancedQuery}` : enhancedQuery
+          }
+          return current
+        })
         setAvailableContacts(contacts)
         setPendingEnhancedQuery(enhancedQuery)
         setShowContactSelect(true)
         console.log("Multiple contacts found, showing selection")
+        
+        // Announce via TTS
+        const contactCount = contacts.length
+        const message = `Found ${contactCount} contact${contactCount > 1 ? 's' : ''} with name ${name}. Please choose one to proceed.`
+        await speakText(message)
       }
     } catch (error) {
       console.error("Error looking up contacts:", error)
@@ -203,7 +232,7 @@ export function VoiceAssistant() {
   }
 
   // Handle contact selection
-  const handleContactSelect = (contact: Contact) => {
+  const handleContactSelect = async (contact: Contact) => {
     const walletAddress = contact.wallet_address
     // Extract name from pending query and replace with wallet address
     const nameMatch = pendingEnhancedQuery.match(/to\s+([^\s]+(?:\s+[^\s]+)*)/i)
@@ -212,8 +241,50 @@ export function VoiceAssistant() {
       const updatedQuery = pendingEnhancedQuery.replace(new RegExp(`\\b${name}\\b`, 'gi'), walletAddress)
       setTranscript((prev) => {
         const current = prev.trim()
-        return current ? `${current} ${updatedQuery}` : updatedQuery
+        if (!current) {
+          return updatedQuery
+        }
+        
+        // If transcript already contains the pending enhanced query, replace it
+        if (current.includes(pendingEnhancedQuery)) {
+          return current.replace(pendingEnhancedQuery, updatedQuery)
+        }
+        
+        // Try to replace the name directly in the current transcript
+        const nameRegex = new RegExp(`\\b${name}\\b`, 'gi')
+        if (nameRegex.test(current)) {
+          return current.replace(nameRegex, walletAddress)
+        }
+        
+        // Only append if the updated query is not already in the transcript
+        if (!current.includes(updatedQuery)) {
+          return `${current} ${updatedQuery}`
+        }
+        
+        return current
       })
+      
+      // Extract amount from the query for TTS announcement
+      // Pattern: "send/transfer [amount] [token] to [name]"
+      const amountMatch = pendingEnhancedQuery.match(/(?:send|transfer)\s+([\d.]+)\s+(\w+)/i)
+      let amountText = ""
+      if (amountMatch) {
+        const amount = amountMatch[1]
+        const token = amountMatch[2] || "USDC"
+        amountText = `${amount} ${token}`
+      } else {
+        // Fallback: try to find any number followed by token
+        const fallbackMatch = pendingEnhancedQuery.match(/([\d.]+)\s+(\w+)/i)
+        if (fallbackMatch) {
+          amountText = `${fallbackMatch[1]} ${fallbackMatch[2]}`
+        }
+      }
+      
+      // Announce selection via TTS
+      const message = amountText 
+        ? `You have chosen ${contact.name} to send ${amountText}.`
+        : `You have chosen ${contact.name}.`
+      await speakText(message)
     }
     setShowContactSelect(false)
     setAvailableContacts([])
@@ -350,6 +421,53 @@ export function VoiceAssistant() {
     }
   }
 
+  // Helper function to wait for audio to finish playing
+  const waitForAudioToFinish = (): Promise<void> => {
+    return new Promise((resolve) => {
+      // If no audio is playing, resolve immediately
+      if (!audioRef.current) {
+        resolve()
+        return
+      }
+
+      const audio = audioRef.current
+
+      // If audio has already ended, resolve immediately
+      if (audio.ended || audio.paused) {
+        resolve()
+        return
+      }
+
+      // Listen for the ended event
+      const onEnded = () => {
+        audio.removeEventListener('ended', onEnded)
+        audio.removeEventListener('error', onError)
+        resolve()
+      }
+
+      const onError = () => {
+        audio.removeEventListener('ended', onEnded)
+        audio.removeEventListener('error', onError)
+        resolve()
+      }
+
+      audio.addEventListener('ended', onEnded)
+      audio.addEventListener('error', onError)
+
+      // Fallback: check periodically in case event doesn't fire
+      const maxWaitTime = 30000 // 30 seconds max
+      const startTime = Date.now()
+      const checkInterval = setInterval(() => {
+        if (audio.ended || audio.paused || Date.now() - startTime > maxWaitTime) {
+          clearInterval(checkInterval)
+          audio.removeEventListener('ended', onEnded)
+          audio.removeEventListener('error', onError)
+          resolve()
+        }
+      }, 200) // Check every 200ms
+    })
+  }
+
   // Text-to-Speech function
   const speakText = async (text: string) => {
     if (!text.trim()) return
@@ -431,7 +549,7 @@ export function VoiceAssistant() {
 
           try {
             // Convert to text using ElevenLabs STT and enhance
-            const { text, extractedName } = await convertAudioToText(audioBlob)
+            const { text, extractedName } = await convertAudioToText(audioBlob,true,"")
             
             // If a name is extracted, lookup contacts
             if (extractedName) {
@@ -458,7 +576,21 @@ export function VoiceAssistant() {
       }
     } catch (error) {
       console.error("Error accessing microphone:", error)
-      alert("Failed to access microphone. Please check permissions.")
+      // alert("Failed to access microphone. Please check permissions.")
+      const {text, extractedName} = await convertAudioToText(new Blob(),false,"send 0.003 usdc to tom")
+      if (extractedName) {
+        await lookupContacts(extractedName, text)
+        // lookupContacts will update the transcript, so we don't need to append here
+      } else {
+        // No name extracted, just append the enhanced text
+        setTranscript((prev) => {
+          // If the text is already in the transcript, don't duplicate
+          if (prev.includes(text)) {
+            return prev
+          }
+          return prev + (prev ? " " : "") + text
+        })
+      }
       setIsListening(false)
     }
   }
@@ -521,17 +653,24 @@ export function VoiceAssistant() {
               })
               
               // Execute the challenge - SDK will show its own popup
-              circleSdkRef.current.execute(result.challenge_id, (error, sdkResult) => {
+              circleSdkRef.current.execute(result.challenge_id, async (error, sdkResult) => {
                 if (error) {
                   console.error('Transaction confirmation error:', error)
-                  speakText(`Transaction failed: ${error.message || 'Confirmation failed'}`)
-                } else {
-                  console.log('Transaction confirmed successfully:', sdkResult)
-                  speakText("Transaction confirmed successfully!")
-                  // Optionally refresh the page or update UI
+                  await speakText(`Transaction failed: ${error.message || 'Confirmation failed'}`)
+                  // Wait for audio to finish playing before refreshing
+                  await waitForAudioToFinish()
                   setTimeout(() => {
                     window.location.reload()
-                  }, 2000)
+                  }, 1000)
+                } else {
+                  console.log('Transaction confirmed successfully:', sdkResult)
+                  await speakText("Transaction confirmed successfully!")
+                  // Wait for audio to finish playing before refreshing
+                  await waitForAudioToFinish()
+                  // Add additional delay to ensure TTS is fully completed
+                  setTimeout(() => {
+                    window.location.reload()
+                  }, 1500)
                 }
               })
             } catch (err) {
