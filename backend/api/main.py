@@ -1,16 +1,31 @@
+import os
+import sys
+
+# CRITICAL: Add the backend directory to Python path FIRST (for Vercel deployment)
+# This must be done before any other imports
+_current_file = os.path.abspath(__file__)
+_api_dir = os.path.dirname(_current_file)
+_backend_dir = os.path.dirname(_api_dir)
+
+# Add backend directory to path (where Agents/, services/, etc. are located)
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
+# Debug logging for Vercel deployment
+print(f"🔧 Python Path Setup:")
+print(f"   Current file: {_current_file}")
+print(f"   API directory: {_api_dir}")
+print(f"   Backend directory: {_backend_dir}")
+print(f"   sys.path[0]: {sys.path[0]}")
+
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response
 from pydantic import BaseModel
 from typing import Optional
-import os
-import sys
 import uuid
 from dotenv import load_dotenv
 import traceback
-
-# Add the backend directory to Python path for Vercel
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 # Load environment variables
 load_dotenv()

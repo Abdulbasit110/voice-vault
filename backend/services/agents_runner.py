@@ -1,22 +1,19 @@
 import os
 import sys
-
-# Add the backend directory to Python path for Vercel serverless
-# This must be done BEFORE importing Agents modules
-_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if _backend_dir not in sys.path:
-    sys.path.insert(0, _backend_dir)
-
 from typing import Any, Dict, Optional
-
 import asyncio
+
+# Import agents SDK
+from agents import Runner
+
+# Import agent builders
+# Note: sys.path should already be configured by main.py
 from Agents.planner import build_planner_agent
 from Agents.portfolio_manager import build_portfolio_manager_agent
 from Agents.risk_analyst import build_risk_analyst_agent
 from Agents.security_validator import build_security_validator_agent
 from Agents.executor import build_executor_agent
 from Agents.auditor import build_auditor_agent
-from agents import Runner
 
 async def run_with_retry(agent, input_data, max_retries=3, initial_delay=1):
 	"""Run an agent with retry logic for transient API errors."""
