@@ -1,3 +1,12 @@
+import os
+import sys
+
+# Add the backend directory to Python path for Vercel serverless
+# This must be done BEFORE importing local modules
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if _backend_dir not in sys.path:
+    sys.path.insert(0, _backend_dir)
+
 from tools.agent_tools import mock_audit_transaction
 from pydantic import BaseModel
 from agents import Agent
