@@ -45,7 +45,7 @@ export function AddContact({ onClose, onSuccess }: AddContactProps) {
 
     try {
       setLoading(true)
-      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000"
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://139.59.152.104:8000"
 
       const response = await fetch(`${apiUrl}/api/contacts/add?user_id=${userId}`, {
         method: "POST",

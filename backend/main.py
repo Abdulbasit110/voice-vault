@@ -74,6 +74,7 @@ async def shutdown_event():
 # Allow Vercel deployment URLs
 cors_origins = [
     "http://localhost:3000",
+    "http://139.59.152.104:3000",
     "http://127.0.0.1:3000",
     "http://localhost:3001",
     "http://127.0.0.1:3001",
